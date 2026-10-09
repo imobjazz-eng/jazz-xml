@@ -10,6 +10,8 @@ import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ajustar, separar } from "./espelho.mjs";
+import { enriquecerTitulo, enriquecerDescricao, enriquecerAnuncio, enriquecerFeed, enderecosSemCoordenada, chaveEndereco, lerAnuncio } from "./enriquecer.mjs";
+import { escolherResultado, geocodificar, precisaConsultar, mesmaVia } from "./geocodificar.mjs";
 
 const aqui = dirname(fileURLToPath(import.meta.url));
 let falhas = 0, total = 0;
@@ -73,6 +75,100 @@ ok("filtro de ativos que removeria demais é ignorado", ids(r.xml).length === 5 
 r = ajustar(base, { ativos: null, minFotos: 0, maximo: 2 });
 ok("teto: ficam os 2 com mais fotos (300 e 47236)", ids(r.xml).sort().join() === "300,47236" && r.excluidos.acima_do_limite === 3, ids(r.xml).join());
 
+const comPreco = (codigo, preco, tipo = "For Sale") =>
+  listing(codigo, 8).replace(/<ListPrice[^<]*<\/ListPrice>/, `<ListPrice currency="BRL">${preco}</ListPrice>`).replace("For Sale", tipo);
+const precos = feed([]).replace("\n    \n", `\n    ${[comPreco("1", 40000000000), comPreco("2", 745), comPreco("3", 500000), comPreco("4", 745, "For Rent")].join("\n    ")}\n`);
+r = ajustar(precos, { ativos: null, minFotos: 0, maximo: 3000 });
+ok("preço de venda absurdo sai e vai para o aviso (1 e 2)", ids(r.xml).join() === "3,4" && r.excluidos.preco_fora_do_padrao === 2 && r.avisos.some((a) => a.includes("1, 2")), ids(r.xml).join());
+
+console.log("enriquecer.mjs — título");
+const venda = { transacao: "For Sale", tipo: "Casa", cidade: "Campinas", bairro: "Centro" };
+const casosTitulo = [
+  ["CASA À VENDA - JARDIM TAMOIO | CAMPINAS/SP", "Casa à Venda - Jardim Tamoio | Campinas/SP"],
+  ["Sobrado Triplex com 3 Dormitórios, Quintal", "Sobrado Triplex à venda com 3 Dormitórios, Quintal"],
+  ["Excelente oportunidade de apartamento à venda no Bosque, em Campinas!  95,00m², 1 suíte.", "Apartamento à venda no Bosque, em Campinas! 95,00m², 1 suíte"],
+  ["Prédio Comercial à Venda no Jardim Miranda | Excelente Oportunidade para Investimento", "Prédio Comercial à Venda no Jardim Miranda"],
+  ["APTO À VENDA NO PORTAL DAS OLIVEIRAS | 2 DORM COM SUÍTE", "Apartamento à Venda no Portal das Oliveiras | 2 Dormitórios com Suíte"],
+  ["Casa  à venda totalmente reformada- 200 metros da praia-Aviação", "Casa à venda totalmente reformada - 200 metros da praia - Aviação"],
+  ["Casa à Venda no Bandeira Branca II ? Jacareí", "Casa à Venda no Bandeira Branca II - Jacareí"],
+  ["Swiss Park - Condomínio Glarus", "Swiss Park - Condomínio Glarus, à venda"],
+  ["Ok", "Casa à venda em Centro, Campinas"],
+];
+for (const [de, para] of casosTitulo) {
+  const t = enriquecerTitulo(de, venda);
+  ok(`título: ${de.slice(0, 45)}`, t === para, t);
+}
+const longo = enriquecerTitulo("Casa térrea à venda no Condomínio Residencial Evidências, em Indaiatuba, com 3 suítes, piscina, espaço gourmet, escritório e 4 vagas", venda);
+ok("título longo cortado em até 100 sem palavra pela metade", longo.length <= 100 && /Indaiatuba|suítes|piscina|gourmet$/.test(longo), longo);
+ok("aluguel: 'para alugar'", enriquecerTitulo("Galpão no Distrito Industrial", { transacao: "For Rent" }) === "Galpão para alugar no Distrito Industrial");
+
+console.log("enriquecer.mjs — descrição");
+const anuncio = { ...venda, uf: "SP", areaUtil: 135, areaTotal: 207, quartos: 3, suites: 1, banheiros: 2, vagas: 2, ano: 2015, diferenciais: ["Piscina", "Churrasqueira"] };
+let d = enriquecerDescricao("Cozinha &amp; área de serviço. Ligue (19) 99798-4383 e agende. Linda casa.\nVeja www.site.com.br\n\n\n\nÓtima localização", anuncio);
+ok("&amp; vira &", d.texto.includes("Cozinha & área"), d.texto);
+ok("frase com telefone e site sai inteira", !/99798|site\.com|Ligue/.test(d.texto) && d.texto.includes("Linda casa."), d.texto);
+ok("descrição curta ganha a ficha só com dados do anúncio",
+  d.ficha && d.texto.includes("- Área útil: 135 m²") && d.texto.includes("- 3 quartos, sendo 1 suíte") && d.texto.includes("Diferenciais: Piscina, Churrasqueira.") && d.texto.includes("Localização: Centro, Campinas/SP."), d.texto);
+ok("sem linhas em branco em excesso", !/\n{3,}/.test(d.texto));
+d = enriquecerDescricao("CASA COM PISCINA E CHURRASQUEIRA NO CENTRO DE SÃO JOSÉ DOS CAMPOS. ACEITA FINANCIAMENTO PELO FGTS.", anuncio, { curta: 0, restaurarNomes: (t) => t.replace(/são josé dos campos/gi, "São José dos Campos") });
+ok("linha em maiúsculas vira frase, preservando sigla e nome", d.texto === "Casa com piscina e churrasqueira no centro de São José dos Campos. Aceita financiamento pelo FGTS.", d.texto);
+d = enriquecerDescricao("Frase completa. ".repeat(250), anuncio);
+ok("descrição longa cortada em frase inteira (até 3000)", d.texto.length <= 3000 && d.texto.endsWith("completa."), d.texto.length);
+ok("descrição longa não ganha ficha", !d.ficha);
+
+console.log("enriquecer.mjs — anúncio e coordenadas");
+const comLocal = (lat, lon) => listing("900", 8).replace(
+  /<Location[\s\S]*?<\/Location>/,
+  `<Location displayAddress="Neighborhood">
+        <Address>Rua Barão de Jaguara</Address>
+        <City><![CDATA[Campinas]]></City>${lat !== undefined ? `
+        <Latitude>${lat}</Latitude>
+        <Longitude>${lon}</Longitude>` : ""}
+        <Neighborhood><![CDATA[Centro]]></Neighborhood>
+        <State abbreviation="SP">São Paulo</State>
+      </Location>`).replace("<Description><![CDATA[Casa & quintal <ótima>]]></Description>", "<Description><![CDATA[Texto &#93;]&gt; que vira fim de CDATA ao decodificar.]]></Description>");
+const chave = chaveEndereco(lerAnuncio(comLocal()));
+const cache = { [chave]: { lat: -22.9056, lon: -47.0608 } };
+let e = enriquecerAnuncio(comLocal(), { coordenadaDe: (k) => cache[k] ?? null });
+ok("sem coordenada: recebe a do cache, depois da cidade", e.mudou.coordenada_adicionada && /<\/City>\n {8}<Latitude>-22.9056000<\/Latitude>\n {8}<Longitude>-47.0608000<\/Longitude>\n {8}<Neighborhood>/.test(e.bloco), e.bloco);
+e = enriquecerAnuncio(comLocal(-13.90108184065817, -50.713421874999995));
+ok("centro do Brasil (pino padrão do Vista) é descartado", e.mudou.coordenada_descartada && !/<Latitude>/.test(e.bloco));
+e = enriquecerAnuncio(comLocal(-22.97, -47.02));
+ok("coordenada boa do Vista fica como está", !e.mudou.coordenada_adicionada && !e.mudou.coordenada_descartada && e.bloco.includes("<Latitude>-22.97</Latitude>"));
+ok("endereço sem coordenada vai para a geocodificação", enderecosSemCoordenada(feed([]).replace("\n    \n", `\n    ${comLocal()}\n`)).length === 1);
+let f = enriquecerFeed(feed([["100", 8], ["200", 9]]));
+ok("feed enriquecido continua XML válido e na mesma ordem", ids(f.xml).join() === "100,200" && f.xml.trimEnd().endsWith("</ListingDataFeed>"));
+{ const b = enriquecerAnuncio(comLocal()).bloco; ok("']]>' vindo de entidade não fecha o CDATA antes da hora", b.includes("Texto ]] >") && (b.match(/\]\]>/g) || []).length === (b.match(/<!\[CDATA\[/g) || []).length, b); }
+
+console.log("geocodificar.mjs");
+const pedido = { chave: "x", rua: "Rua Dr. Barão de Jaguara", cidade: "Campinas", uf: "SP", estado: "São Paulo" };
+const res = (road, city, lat = "-22.9", lon = "-47.06") => ({ lat, lon, address: { road, city } });
+ok("aceita mesma rua e cidade", escolherResultado(pedido, [res("Rua Barão de Jaguara", "Campinas")]).ok);
+ok("recusa cidade diferente", escolherResultado(pedido, [res("Rua Barão de Jaguara", "Hortolândia")]).motivo === "cidade_divergente");
+ok("recusa rua diferente", escolherResultado(pedido, [res("Rua Barão de Itapura", "Campinas")]).motivo === "via_divergente");
+ok("recusa fora do estado", escolherResultado(pedido, [res("Rua Barão de Jaguara", "Campinas", "-13.9", "-50.7")]).motivo === "fora_do_estado");
+ok("rua: 'Av. Prof. X' casa com 'Avenida Professor X'", mesmaVia("Av. Prof. Zeferino Vaz", "Avenida Professor Zeferino Vaz"));
+ok("falha é tentada de novo só depois de 30 dias",
+  !precisaConsultar({ s: "via_divergente", t: "2026-10-01" }, new Date("2026-10-09")) && precisaConsultar({ s: "via_divergente", t: "2026-08-01" }, new Date("2026-10-09")) && !precisaConsultar({ s: "ok", t: "2020-01-01" }));
+{
+  const pedidos = [];
+  const fetchOriginal = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    pedidos.push(String(url));
+    const rua = new URL(url).searchParams.get("street");
+    if (rua === "Rua Quebrada") throw new Error("rede caiu");
+    return { ok: true, status: 200, json: async () => (rua === "Rua A" ? [res("Rua A", "Campinas")] : []) };
+  };
+  const c = { velho: { s: "ok", lat: -22, lon: -47, t: "2026-01-01" } };
+  const lista = ["Rua A", "Rua B", "Rua C"].map((rua) => ({ ...pedido, chave: rua, rua }));
+  let g = await geocodificar([...lista, { ...pedido, chave: "velho" }], c, { limite: 2, intervaloMs: 0, agora: new Date("2026-10-09") });
+  ok("respeita o limite por execução e não repete o que está no cache", pedidos.length === 2 && g.pendentes === 3 && g.achados === 1);
+  ok("grava acerto e falha no cache", c["Rua A"].s === "ok" && c["Rua B"].s === "sem_resultado" && !c["Rua C"]);
+  g = await geocodificar([{ ...pedido, chave: "q", rua: "Rua Quebrada" }, { ...pedido, chave: "C", rua: "Rua C" }], c, { intervaloMs: 0 });
+  ok("erro de rede para a geocodificação sem derrubar", g.erro === "rede caiu" && !c.q && !c.C);
+  globalThis.fetch = fetchOriginal;
+}
+
 // Ponta a ponta: gerar.mjs com o Vista simulado.
 console.log("gerar.mjs");
 const dir = mkdtempSync(join(tmpdir(), "feed-"));
@@ -91,6 +187,7 @@ globalThis.fetch = async (url) => {
     for (const c of fatia) corpo[c] = { Codigo: c };
     return { ok: true, status: 200, json: async () => corpo };
   }
+  if (url.includes("nominatim")) return { ok: true, status: 200, json: async () => [] };
   return { ok: true, status: 200, text: async () => xml };
 };`);
 
@@ -101,7 +198,7 @@ const arquivo = (conteudo) => { const p = join(dir, `vista-${nArq++}.xml`); writ
 const rodar = (env, saida) => {
   try {
     execFileSync(process.execPath, ["--import", falso, join(aqui, "gerar.mjs"), saida], {
-      env: { ...process.env, VISTA_API_KEY: "teste", FEED_MINIMO: "100", ...env }, stdio: "pipe",
+      env: { ...process.env, VISTA_API_KEY: "teste", FEED_MINIMO: "100", GEO_INTERVALO_MS: "0", ...env }, stdio: "pipe",
     });
     return 0;
   } catch (e) { return e.status ?? 1; }
@@ -111,6 +208,8 @@ const codigos = muitos.map(([c]) => c);
 const s1 = join(dir, "a", "vrsync.xml");
 ok("gera e grava", rodar({ XML_FALSO: arquivo(feed(muitos)), CODIGOS_FALSOS: JSON.stringify(codigos) }, s1) === 0 && existsSync(s1));
 ok("gravou os 120", existsSync(s1) && ids(readFileSync(s1, "utf8")).length === 120);
+ok("gravou o cache de geocodificação ao lado", existsSync(join(dir, "a", "geocode.json")));
+ok("título enriquecido no arquivo final", readFileSync(s1, "utf8").includes("<Title><![CDATA["));
 
 const s2 = join(dir, "b", "vrsync.xml");
 ok("XML do Vista truncado: erro e nada gravado",

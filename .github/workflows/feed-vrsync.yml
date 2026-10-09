@@ -8,6 +8,9 @@
 # Vista não reconhece mais (a API é em tempo real; o arquivo do Vista, diário),
 # sai quem tem menos de FEED_MIN_FOTOS fotos, e o total fica em FEED_MAXIMO,
 # priorizando quem tem mais fotos. Ver gerador/espelho.mjs.
+# Depois, enriquecimento (gerador/enriquecer.mjs): título e descrição limpos
+# para o portal e coordenada para quem não tem, geocodificada no
+# OpenStreetMap com cache (geocode.json, publicado ao lado do XML).
 #
 # POR QUE AQUI. O XML era montado na Supabase e congelou em 20/09/2026 com a
 # restrição de cota da organização. Aqui não há banco no caminho, e
@@ -67,8 +70,22 @@ jobs:
             echo "::warning::Sem VISTA_API_KEY: imóveis desativados no Vista só saem quando o Vista regenerar o próprio XML."
           fi
 
+      # Cache da geocodificação: volta da última publicação, para cada endereço
+      # ser consultado no OpenStreetMap uma vez só.
+      - name: Recuperar cache de geocodificação
+        run: |
+          mkdir -p cache
+          if git fetch -q --depth=1 origin gh-pages 2>/dev/null && git show FETCH_HEAD:geocode.json > cache/geocode.json 2>/dev/null; then
+            echo "Cache recuperado: $(wc -c < cache/geocode.json) bytes"
+          else
+            echo '{}' > cache/geocode.json
+            echo "Sem cache anterior: começando vazio"
+          fi
+
       - name: Gerar XML a partir do Vista
         env:
+          GEOCODE_CACHE: cache/geocode.json
+          GEO_LIMITE: ${{ vars.GEO_LIMITE || '200' }}
           VISTA_API_KEY: ${{ secrets.VISTA_API_KEY }}
           VISTA_XML_URL: ${{ vars.VISTA_XML_URL }}
           FEED_MINIMO: ${{ vars.FEED_MINIMO || '1000' }}

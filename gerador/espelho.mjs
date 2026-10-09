@@ -11,7 +11,10 @@
  *     real; o arquivo, não. Com isso, desativado no Vista sai do portal na
  *     hora seguinte.
  *  2. Mínimo de fotos por anúncio (padrão 7, regra do feed antigo).
- *  3. Teto de anúncios (padrão 3000, regra do feed antigo), priorizando
+ *  3. Preço de venda fora do aceito pelo Grupo ZAP (R$ 15 mil a R$ 150
+ *     milhões, regra do feed antigo) sai: é erro de digitação no Vista
+ *     (R$ 40 bilhões, R$ 745) e o código vai para o aviso do log.
+ *  4. Teto de anúncios (padrão 3000, regra do feed antigo), priorizando
  *     quem tem mais fotos.
  *
  * Nada é inventado: nenhum campo ausente é preenchido com valor padrão.
@@ -23,6 +26,16 @@ const RE_LISTING = /<Listing>[\s\S]*?<\/Listing>/g;
 function codigoDe(bloco) {
   const m = bloco.match(/<ListingID>\s*(?:<!\[CDATA\[)?\s*([^<\]\s]+)/);
   return m ? m[1] : null;
+}
+
+const PRECO_VENDA_MIN = 15_000;
+const PRECO_VENDA_MAX = 150_000_000;
+
+function precoForaDoPadrao(bloco) {
+  const tipo = (bloco.match(/<TransactionType>\s*([^<]+?)\s*<\/TransactionType>/) || [])[1];
+  if (tipo === "For Rent") return false;
+  const preco = Number((bloco.match(/<ListPrice[^>]*>\s*([\d.]+)\s*<\/ListPrice>/) || [])[1]);
+  return Number.isFinite(preco) && preco > 0 && (preco < PRECO_VENDA_MIN || preco > PRECO_VENDA_MAX);
 }
 
 function fotosDe(bloco) {
@@ -56,7 +69,7 @@ export function separar(xml) {
  */
 export function ajustar(xml, { ativos = null, minFotos = 7, maximo = 3000, limiteRemocao = 0.1, agora = new Date() } = {}) {
   const { cabecalho, blocos, rodape } = separar(xml);
-  const excluidos = { inativo_no_vista: 0, poucas_fotos: 0, acima_do_limite: 0, sem_codigo: 0 };
+  const excluidos = { inativo_no_vista: 0, poucas_fotos: 0, preco_fora_do_padrao: 0, acima_do_limite: 0, sem_codigo: 0 };
   const avisos = [];
 
   let itens = blocos.map((bloco) => ({ bloco, codigo: codigoDe(bloco), fotos: fotosDe(bloco) }));
@@ -79,6 +92,14 @@ export function ajustar(xml, { ativos = null, minFotos = 7, maximo = 3000, limit
   const antes = itens.length;
   itens = itens.filter((i) => i.fotos >= minFotos);
   excluidos.poucas_fotos = antes - itens.length;
+
+  const precoErrado = itens.filter((i) => precoForaDoPadrao(i.bloco)).map((i) => i.codigo);
+  if (precoErrado.length) {
+    excluidos.preco_fora_do_padrao = precoErrado.length;
+    avisos.push(`preço de venda fora de R$ 15 mil a R$ 150 milhões (corrigir no Vista): ${precoErrado.join(", ")}`);
+    const fora = new Set(precoErrado);
+    itens = itens.filter((i) => !fora.has(i.codigo));
+  }
 
   if (itens.length > maximo) {
     // Mais fotos primeiro; empate pelo código, para a seleção ser estável.
