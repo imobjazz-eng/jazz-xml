@@ -8,26 +8,35 @@ gerado de hora em hora direto da API do Vista.
 ## Como funciona
 
 1. `.github/workflows/feed-vrsync.yml` roda de hora em hora (minuto 17).
-2. `gerador/vista.mjs` baixa o acervo inteiro do Vista (`/imoveis/listar`, 50 por página, 8 páginas em paralelo).
-3. `gerador/vrsync.mjs` monta o XML. Ficam de fora: imóvel sem código, sem finalidade Venda/Aluguel ou sem preço, e códigos duplicados.
+2. `gerador/vista.mjs` baixa o XML VRSync que o próprio Vista gera para os portais (todas as fotos, características, condomínio, IPTU, endereço sem número) e a lista de códigos ativos da API do Vista.
+3. `gerador/espelho.mjs` aplica três regras sobre o XML do Vista, sem inventar nenhum dado:
+   - sai quem a API não reconhece mais (a API é em tempo real; o arquivo do Vista é gerado uma vez por dia);
+   - sai quem tem menos de `FEED_MIN_FOTOS` fotos (padrão 7, como no feed antigo);
+   - no máximo `FEED_MAXIMO` anúncios (padrão 3000, como no feed antigo), priorizando quem tem mais fotos.
 4. O XML é validado (parser do Python) e publicado no branch `gh-pages` (GitHub Pages).
 
 ## Travas
 
 Nada é publicado se:
-- o Vista entregar menos de 98% dos imóveis que declara ter; ou
+- o XML do Vista não vier inteiro (sem o fechamento `</ListingDataFeed>`);
 - o feed ficar com menos de `FEED_MINIMO` anúncios (padrão 1000).
 
-Nesses casos o XML anterior continua no ar. Feed velho mantém o anúncio no
-portal; feed vazio ou truncado derruba.
+O filtro da API é ignorado (com aviso no log) se a API falhar, se entregar
+menos de 98% dos códigos, ou se for remover mais de 10% do arquivo de uma vez,
+que é sintoma de problema na API e não de imóveis desativados.
+
+Em qualquer trava o XML anterior continua no ar. Feed velho mantém o anúncio
+no portal; feed vazio ou truncado derruba.
 
 ## Configuração
 
 | Onde | Nome | Obrigatório |
 |---|---|---|
-| Secrets | `VISTA_API_KEY` | sim |
-| Variables | `PUBLIC_FEED_CONTACT_NAME`, `PUBLIC_FEED_CONTACT_PHONE` | não |
+| Secrets | `VISTA_API_KEY` | recomendado (filtro de ativos em tempo real) |
 | Variables | `FEED_MINIMO` | não (padrão 1000) |
+| Variables | `FEED_MIN_FOTOS` | não (padrão 7) |
+| Variables | `FEED_MAXIMO` | não (padrão 3000) |
+| Variables | `VISTA_XML_URL` | não (padrão: XML de portais do Vista) |
 
 ## Rodar local
 

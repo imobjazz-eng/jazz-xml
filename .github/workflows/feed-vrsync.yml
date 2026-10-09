@@ -1,17 +1,22 @@
-# Gera o XML dos portais (VRSync: Canal Pró / Grupo ZAP) direto da API do
-# Vista, de hora em hora, e publica no GitHub Pages:
+# Gera o XML dos portais (VRSync: Canal Pró / Grupo ZAP) de hora em hora e
+# publica no GitHub Pages:
 #
 #   https://imobjazz-eng.github.io/jazz-conecta/vrsync.xml
 #
-# POR QUE ASSIM. O XML era montado na Supabase e congelou em 20/09/2026 com
-# a restrição de cota da organização. Aqui não há banco nenhum no caminho:
-# Vista → GitHub Actions → GitHub Pages. Repositório público, então Pages e
-# Actions são gratuitos.
+# COMO. Base: o XML VRSync completo que o próprio Vista gera para os portais
+# (fotos, características, condomínio, IPTU). Sobre ele: sai quem a API do
+# Vista não reconhece mais (a API é em tempo real; o arquivo do Vista, diário),
+# sai quem tem menos de FEED_MIN_FOTOS fotos, e o total fica em FEED_MAXIMO,
+# priorizando quem tem mais fotos. Ver gerador/espelho.mjs.
 #
-# ÚNICO SEGREDO (Settings → Secrets and variables → Actions):
-#   VISTA_API_KEY   chave da API do Vista
-# Variáveis opcionais (aba Variables): PUBLIC_FEED_CONTACT_NAME,
-# PUBLIC_FEED_CONTACT_PHONE, FEED_MINIMO.
+# POR QUE AQUI. O XML era montado na Supabase e congelou em 20/09/2026 com a
+# restrição de cota da organização. Aqui não há banco no caminho, e
+# repositório público deixa Pages e Actions gratuitos.
+#
+# SEGREDO (Settings → Secrets and variables → Actions):
+#   VISTA_API_KEY   chave da API do Vista (sem ela, o filtro de ativos não roda)
+# Variáveis opcionais (aba Variables): FEED_MINIMO (1000), FEED_MIN_FOTOS (7),
+# FEED_MAXIMO (3000), VISTA_XML_URL.
 
 name: Feed VRSync dos portais
 
@@ -59,16 +64,16 @@ jobs:
           VISTA_API_KEY: ${{ secrets.VISTA_API_KEY }}
         run: |
           if [ -z "$VISTA_API_KEY" ]; then
-            echo "::error::Falta o segredo VISTA_API_KEY. Cadastre em Settings → Secrets and variables → Actions."
-            exit 1
+            echo "::warning::Sem VISTA_API_KEY: imóveis desativados no Vista só saem quando o Vista regenerar o próprio XML."
           fi
 
       - name: Gerar XML a partir do Vista
         env:
           VISTA_API_KEY: ${{ secrets.VISTA_API_KEY }}
-          PUBLIC_FEED_CONTACT_NAME: ${{ vars.PUBLIC_FEED_CONTACT_NAME }}
-          PUBLIC_FEED_CONTACT_PHONE: ${{ vars.PUBLIC_FEED_CONTACT_PHONE }}
+          VISTA_XML_URL: ${{ vars.VISTA_XML_URL }}
           FEED_MINIMO: ${{ vars.FEED_MINIMO || '1000' }}
+          FEED_MIN_FOTOS: ${{ vars.FEED_MIN_FOTOS || '7' }}
+          FEED_MAXIMO: ${{ vars.FEED_MAXIMO || '3000' }}
         run: node gerador/gerar.mjs site/vrsync.xml
 
       # O runner do GitHub não traz o xmllint; o parser do Python já vem
@@ -76,8 +81,8 @@ jobs:
       - name: Validar XML
         run: python3 -c "import xml.etree.ElementTree as E, sys; r = E.parse(sys.argv[1]).getroot(); print('XML ok:', len(r.findall('{*}Listing')), 'anúncios')" site/vrsync.xml
 
-      # Um commit só no gh-pages, sobrescrito a cada hora: o arquivo tem ~10 MB
-      # e o histórico cresceria 240 MB por dia se cada geração virasse commit.
+      # Um commit só no gh-pages, sobrescrito a cada hora: o arquivo tem ~25 MB
+      # e o histórico cresceria 600 MB por dia se cada geração virasse commit.
       # Se o gerador falhar acima, este passo não roda e o XML anterior fica
       # no ar: feed velho mantém anúncio; feed vazio derruba.
       - name: Publicar no GitHub Pages

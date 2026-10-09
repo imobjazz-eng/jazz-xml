@@ -1,10 +1,6 @@
 /**
- * Testes do gerador do VRSync — sem rede.
- *
- * A amostra é a resposta REAL do /imoveis/listar em 09/10/2026 (descrições
- * encurtadas). O que estes testes protegem é o que tira anúncio do ar ou
- * publica errado: XML mal escapado, preço na finalidade errada, anúncio sem
- * preço, e feed truncado sendo gravado.
+ * Testes do gerador — sem rede. O formato do XML de exemplo copia o que o
+ * Vista exporta (conferido no arquivo real em 09/10/2026).
  *
  * Rodar: node gerador/teste.mjs
  */
@@ -13,7 +9,7 @@ import { mkdtempSync, readFileSync, existsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { montarFeed, motivoExclusao } from "./vrsync.mjs";
+import { ajustar, separar } from "./espelho.mjs";
 
 const aqui = dirname(fileURLToPath(import.meta.url));
 let falhas = 0, total = 0;
@@ -23,68 +19,85 @@ const ok = (nome, cond, det = "") => {
   if (!cond) falhas++;
 };
 
-const amostra = [
-  { Codigo: "47940", Status: "Venda", Categoria: "Casa em Condomínio", Bairro: "Altos da Bela Vista", Cidade: "Indaiatuba",
-    Endereco: "João Ceccon", Numero: "1081", ValorVenda: "1920000", ValorLocacao: "0", AreaTotal: "1111", AreaPrivativa: "360",
-    Dormitorios: "4", Suites: "4", Vagas: "4", BanheiroSocialQtd: "5", Latitude: "-23.0746567", Longitude: "-47.2344067",
-    FotoDestaque: "https://cdn.vistahost.com.br/rafaelak/vista.imobi/fotos/48033/ib4An5Z4l2Z3mG72ME4kO_480336ac7a8dbe8d39.jpg",
-    DescricaoWeb: "Excelência, sofisticação & espaço <alto padrão>." },
-  // Empreendimento: vem com preço 0 — tem de ficar de fora.
-  { Codigo: "47941", Status: "Venda", Categoria: "Empreendimento", Bairro: "Altos da Bela Vista", Cidade: "Indaiatuba",
-    ValorVenda: "0", ValorLocacao: "0", Latitude: "-23.0746567", Longitude: "-47.2344067", DescricaoWeb: "" },
-  // Sem coordenada: o Vista manda "" e não pode virar <Latitude>0</Latitude>.
-  { Codigo: "47943", Status: "Venda", Categoria: "Apartamento", Bairro: "Aviação", Cidade: "Praia Grande",
-    Endereco: "Martin Afonso de Souza", Numero: "345", ValorVenda: "980000", ValorLocacao: "0", AreaTotal: "145",
-    AreaPrivativa: "122", Dormitorios: "3", Suites: "3", Vagas: "2", BanheiroSocialQtd: "1", Latitude: "", Longitude: "",
-    FotoDestaque: "https://cdn.vistahost.com.br/rafaelak/vista.imobi/fotos/48036/i7Ms7Cfe881fGy7_480366ac7f19837809.jpg",
-    DescricaoWeb: "A menos de 200 metros da praia!" },
-  // Aluguel com ValorVenda preenchido por engano: só o aluguel pode sair.
-  { Codigo: "47236", Status: "Aluguel", Categoria: "Apartamento", Bairro: "Areão", Cidade: "Taubaté",
-    ValorVenda: "300000", ValorLocacao: "1800", AreaPrivativa: "68", Dormitorios: "2", FotoDestaque: "" },
-  { Codigo: "46725", Status: "Venda e Aluguel", Categoria: "Apartamento", Bairro: "Taquaral", Cidade: "Campinas",
-    ValorVenda: "650000", ValorLocacao: "3500" },
-  { Codigo: "99999", Status: "Permuta", Categoria: "Terreno", Cidade: "Jacareí", ValorVenda: "100000" },
-  { Codigo: "47940", Status: "Venda", Categoria: "Casa", Cidade: "Indaiatuba", ValorVenda: "1" }, // duplicado
-];
+function listing(codigo, fotos) {
+  const itens = Array.from({ length: fotos }, (_, i) =>
+    `        <Item medium="image" caption="">https://cdn.vistahost.com.br/f/${codigo}_${i}.jpg</Item>`).join("\n");
+  return `<Listing>
+      <ListingID>${codigo}</ListingID>
+      <Details>
+        <Description><![CDATA[Casa & quintal <ótima>]]></Description>
+        <ListPrice currency="BRL">500000</ListPrice>
+      </Details>
+      <Location displayAddress="Neighborhood"><City><![CDATA[Atibaia]]></City></Location>
+      <Media>
+${itens}
+      </Media>
+      <TransactionType>For Sale</TransactionType>
+    </Listing>`;
+}
 
-console.log("montarFeed");
-const { xml, publicados, excluidos } = montarFeed(amostra, { agora: new Date("2026-10-09T12:00:00Z") });
-const anuncio = (cod) => (xml.match(new RegExp(`<Listing>\\s*<ListingID>${cod}</ListingID>[\\s\\S]*?</Listing>`)) ?? [""])[0];
+function feed(lista) {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<ListingDataFeed xmlns="http://www.vivareal.com/schemas/1.0/VRSync">
+  <Listings>
+    <Header>
+      <Provider>Vista</Provider>
+      <PublishDate>2026-10-09T07:32:14</PublishDate>
+    </Header>
+    ${lista.map(([c, f]) => listing(c, f)).join("\n    ")}
+  </Listings>
+</ListingDataFeed>
+`;
+}
 
-ok("publica só os 4 válidos", publicados === 4, `publicados=${publicados}`);
-ok("ListingCount bate", xml.includes("<ListingCount>4</ListingCount>"));
-ok("conta motivos de exclusão", excluidos.sem_preco === 1 && excluidos.finalidade_invalida === 1 && excluidos.duplicado === 1,
-  JSON.stringify(excluidos));
-ok("empreendimento sem preço fica fora", !anuncio("47941"));
-ok("escapa & e < > na descrição", anuncio("47940").includes("sofisticação &amp; espaço &lt;alto padrão&gt;."));
-ok("endereço junta rua e número", anuncio("47940").includes("<Address>João Ceccon, 1081</Address>"));
-ok("usa área privativa como útil", anuncio("47940").includes("<LivingArea>360</LivingArea>"));
-ok("coordenada vazia não vira 0", !anuncio("47943").includes("<Latitude>"));
-ok("aluguel não publica preço de venda", !anuncio("47236").includes("ListPrice") && anuncio("47236").includes('<RentalPrice currency="BRL">1800</RentalPrice>'));
-ok("aluguel é For Rent", anuncio("47236").includes("<TransactionType>For Rent</TransactionType>"));
-ok("sem foto vira <Media />", anuncio("47236").includes("<Media />"));
-ok("venda e aluguel leva os dois preços", anuncio("46725").includes("ListPrice") && anuncio("46725").includes("RentalPrice"));
-ok("motivo sem_codigo", motivoExclusao({ Codigo: " ", Status: "Venda", ValorVenda: "1" }) === "sem_codigo");
+const ids = (xml) => [...xml.matchAll(/<ListingID>(\d+)<\/ListingID>/g)].map((m) => m[1]);
 
-// gerar.mjs de ponta a ponta, com o Vista simulado por um fetch falso.
+console.log("espelho.mjs");
+const base = feed([["100", 10], ["200", 3], ["300", 20], ["47236", 12], ["500", 8]]);
+ok("separa 5 anúncios", separar(base).blocos.length === 5);
+
+let r = ajustar(base, { ativos: new Set(["100", "200", "300", "500"]), minFotos: 7, maximo: 3000, limiteRemocao: 0.5, agora: new Date("2026-10-09T18:00:00Z") });
+ok("desativado no Vista sai (47236)", !ids(r.xml).includes("47236") && r.excluidos.inativo_no_vista === 1);
+ok("menos de 7 fotos sai (200)", !ids(r.xml).includes("200") && r.excluidos.poucas_fotos === 1);
+ok("ficam 100, 300, 500 na ordem original", ids(r.xml).join() === "100,300,500", ids(r.xml).join());
+ok("PublishDate atualizado", r.xml.includes("<PublishDate>2026-10-09T18:00:00</PublishDate>"));
+ok("cabeçalho e rodapé preservados", r.xml.startsWith('<?xml version="1.0"') && r.xml.trimEnd().endsWith("</ListingDataFeed>"));
+ok("conteúdo do anúncio intacto (CDATA, fotos)", r.xml.includes("<![CDATA[Casa & quintal <ótima>]]>") && (r.xml.match(/medium="image"/g) || []).length === 38);
+
+r = ajustar(base, { ativos: null, minFotos: 0, maximo: 3000 });
+ok("API fora: não filtra e avisa", ids(r.xml).length === 5 && r.avisos.some((a) => a.includes("indisponível")));
+
+r = ajustar(base, { ativos: new Set(["100"]), minFotos: 0, maximo: 3000, limiteRemocao: 0.1 });
+ok("filtro de ativos que removeria demais é ignorado", ids(r.xml).length === 5 && r.avisos.some((a) => a.includes("ignorado")));
+
+r = ajustar(base, { ativos: null, minFotos: 0, maximo: 2 });
+ok("teto: ficam os 2 com mais fotos (300 e 47236)", ids(r.xml).sort().join() === "300,47236" && r.excluidos.acima_do_limite === 3, ids(r.xml).join());
+
+// Ponta a ponta: gerar.mjs com o Vista simulado.
 console.log("gerar.mjs");
-const dir = mkdtempSync(join(tmpdir(), "vrsync-"));
+const dir = mkdtempSync(join(tmpdir(), "feed-"));
 const falso = join(dir, "fetch-falso.mjs");
 writeFileSync(falso, `
-const itens = JSON.parse(process.env.ITENS_FALSOS);
-const declarado = Number(process.env.TOTAL_DECLARADO || itens.length);
+import { readFileSync } from "node:fs";
+const xml = readFileSync(process.env.XML_FALSO, "utf8");
+const codigos = JSON.parse(process.env.CODIGOS_FALSOS || "null");
 globalThis.fetch = async (url) => {
-  const p = JSON.parse(new URL(url).searchParams.get("pesquisa")).paginacao;
-  const fatia = itens.slice((p.pagina - 1) * p.quantidade, p.pagina * p.quantidade);
-  const corpo = { total: String(declarado), paginas: String(Math.ceil(declarado / p.quantidade)) };
-  for (const i of fatia) corpo[i.Codigo] = i;
-  return { ok: true, status: 200, json: async () => corpo };
+  url = String(url);
+  if (url.includes("/imoveis/listar")) {
+    if (!codigos) return { ok: false, status: 500, json: async () => ({}) };
+    const p = JSON.parse(new URL(url).searchParams.get("pesquisa")).paginacao;
+    const fatia = codigos.slice((p.pagina - 1) * p.quantidade, p.pagina * p.quantidade);
+    const corpo = { total: String(codigos.length), paginas: String(Math.ceil(codigos.length / p.quantidade)) };
+    for (const c of fatia) corpo[c] = { Codigo: c };
+    return { ok: true, status: 200, json: async () => corpo };
+  }
+  return { ok: true, status: 200, text: async () => xml };
 };`);
 
-const muitos = Array.from({ length: 120 }, (_, i) => ({
-  Codigo: String(10000 + i), Status: i % 2 ? "Venda" : "Aluguel", Categoria: "Casa", Cidade: "Atibaia",
-  ValorVenda: "500000", ValorLocacao: "2500",
-}));
+const muitos = Array.from({ length: 120 }, (_, i) => [String(10000 + i), 8]);
+// Em arquivo, não em variável de ambiente: o Linux limita cada variável a 128 KB.
+let nArq = 0;
+const arquivo = (conteudo) => { const p = join(dir, `vista-${nArq++}.xml`); writeFileSync(p, conteudo); return p; };
 const rodar = (env, saida) => {
   try {
     execFileSync(process.execPath, ["--import", falso, join(aqui, "gerar.mjs"), saida], {
@@ -93,20 +106,23 @@ const rodar = (env, saida) => {
     return 0;
   } catch (e) { return e.status ?? 1; }
 };
+const codigos = muitos.map(([c]) => c);
 
-const saida1 = join(dir, "a", "vrsync.xml");
-ok("percorre as 3 páginas e grava", rodar({ ITENS_FALSOS: JSON.stringify(muitos) }, saida1) === 0 && existsSync(saida1));
-ok("gravou os 120", existsSync(saida1) && readFileSync(saida1, "utf8").includes("<ListingCount>120</ListingCount>"));
+const s1 = join(dir, "a", "vrsync.xml");
+ok("gera e grava", rodar({ XML_FALSO: arquivo(feed(muitos)), CODIGOS_FALSOS: JSON.stringify(codigos) }, s1) === 0 && existsSync(s1));
+ok("gravou os 120", existsSync(s1) && ids(readFileSync(s1, "utf8")).length === 120);
 
-const saida2 = join(dir, "b", "vrsync.xml");
-ok("Vista truncado: sai com erro e não grava",
-  rodar({ ITENS_FALSOS: JSON.stringify(muitos.slice(0, 80)), TOTAL_DECLARADO: "120" }, saida2) !== 0 && !existsSync(saida2));
+const s2 = join(dir, "b", "vrsync.xml");
+ok("XML do Vista truncado: erro e nada gravado",
+  rodar({ XML_FALSO: arquivo(feed(muitos).slice(0, 5000)), CODIGOS_FALSOS: JSON.stringify(codigos) }, s2) !== 0 && !existsSync(s2));
 
-const saida3 = join(dir, "c", "vrsync.xml");
-ok("abaixo do piso: sai com erro e não grava",
-  rodar({ ITENS_FALSOS: JSON.stringify(muitos.slice(0, 50)) }, saida3) !== 0 && !existsSync(saida3));
+const s3 = join(dir, "c", "vrsync.xml");
+ok("API fora: publica o XML do Vista mesmo assim",
+  rodar({ XML_FALSO: arquivo(feed(muitos)) }, s3) === 0 && ids(readFileSync(s3, "utf8")).length === 120);
 
-ok("sem chave: sai com erro", rodar({ VISTA_API_KEY: "", ITENS_FALSOS: "[]" }, join(dir, "d.xml")) !== 0);
+const s4 = join(dir, "d", "vrsync.xml");
+ok("abaixo do piso: erro e nada gravado",
+  rodar({ XML_FALSO: arquivo(feed(muitos.slice(0, 50))), CODIGOS_FALSOS: JSON.stringify(codigos) }, s4) !== 0 && !existsSync(s4));
 
 console.log(`\n${total - falhas}/${total} ok`);
 process.exit(falhas ? 1 : 0);

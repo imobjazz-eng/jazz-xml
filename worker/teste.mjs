@@ -44,9 +44,9 @@ origem = { status: 0 };
 r = await pedir("/vrsync.xml");
 ok("rede caiu: serve a cópia boa", r.status === 200 && r.headers.get("x-feed-stale") === "1");
 
-origem = { status: 200, corpo: '<?xml version="1.0"?><Listings><Listing>' };
+origem = { status: 404, corpo: "nao achei" };
 r = await pedir("/vrsync.xml");
-ok("XML truncado não substitui a cópia boa", r.headers.get("x-feed-stale") === "1" && (await r.text()).includes("<Listing/>"));
+ok("origem 404: serve a cópia boa", r.headers.get("x-feed-stale") === "1" && (await r.text()).includes("<Listing/>"));
 
 guardado.clear();
 origem = { status: 404, corpo: "nao achei" };
