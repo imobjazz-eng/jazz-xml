@@ -40,3 +40,15 @@ VISTA_API_KEY=... node gerador/gerar.mjs saida/vrsync.xml  # gera o arquivo
 
 Extraído de `sampaioopablo1-lgtm/jazz-lead-conecta` (PR #63) quando a Supabase
 que montava o feed ficou restrita por cota, em 09/10/2026.
+
+## URL antiga dos portais (Worker da Cloudflare)
+
+Os portais já têm cadastrada a URL
+`https://jazz-feed-vrsync.pablo-jazzimob.workers.dev/vrsync.xml`. O Worker em
+`worker/index.js` busca o XML do GitHub Pages e entrega nesse endereço, com
+cópia de segurança no cache da Cloudflare se o GitHub falhar. Assim ninguém
+precisa trocar o cadastro no Canal Pró.
+
+Publicação: `.github/workflows/deploy-worker.yml`, com os segredos
+`CLOUDFLARE_API_TOKEN` (permissão "Edit Cloudflare Workers") e
+`CLOUDFLARE_ACCOUNT_ID`. Testes: `node worker/teste.mjs`.
