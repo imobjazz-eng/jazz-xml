@@ -10,7 +10,7 @@ gerado de hora em hora direto da API do Vista.
 1. `.github/workflows/feed-vrsync.yml` roda de hora em hora (minuto 17).
 2. `gerador/vista.mjs` baixa o acervo inteiro do Vista (`/imoveis/listar`, 50 por página, 8 páginas em paralelo).
 3. `gerador/vrsync.mjs` monta o XML. Ficam de fora: imóvel sem código, sem finalidade Venda/Aluguel ou sem preço, e códigos duplicados.
-4. O XML é validado com `xmllint` e publicado no branch `gh-pages` (GitHub Pages).
+4. O XML é validado (parser do Python) e publicado no branch `gh-pages` (GitHub Pages).
 
 ## Travas
 
