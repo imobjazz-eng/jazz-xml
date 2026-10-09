@@ -79,7 +79,7 @@ jobs:
       # O runner do GitHub não traz o xmllint; o parser do Python já vem
       # instalado e acusa qualquer XML mal formado.
       - name: Validar XML
-        run: python3 -c "import xml.etree.ElementTree as E, sys; r = E.parse(sys.argv[1]).getroot(); print('XML ok:', len(r.findall('{*}Listing')), 'anúncios')" site/vrsync.xml
+        run: python3 -c "import xml.etree.ElementTree as E, sys; r = E.parse(sys.argv[1]).getroot(); print('XML ok:', len(r.findall('.//{*}Listing')), 'anúncios')" site/vrsync.xml
 
       # Um commit só no gh-pages, sobrescrito a cada hora: o arquivo tem ~25 MB
       # e o histórico cresceria 600 MB por dia se cada geração virasse commit.
