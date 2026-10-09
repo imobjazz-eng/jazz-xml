@@ -1,82 +1,102 @@
 /**
- * Download do acervo inteiro da API do Vista + montagem do VRSync, com as
- * travas contra feed truncado. Usado pelo `gerar.mjs` (linha de comando /
- * GitHub Actions).
+ * Rede: baixa o XML de portais do Vista e a lista de códigos ativos da API,
+ * e junta os dois com as regras de `espelho.mjs`.
  */
-import { montarFeed } from "./vrsync.mjs";
+import { ajustar } from "./espelho.mjs";
 
-const CAMPOS = [
-  "Codigo", "Status", "Categoria", "Bairro", "Cidade", "Endereco", "Numero",
-  "ValorVenda", "ValorLocacao", "AreaTotal", "AreaPrivativa", "Dormitorios",
-  "Suites", "Vagas", "BanheiroSocialQtd", "FotoDestaque", "DescricaoWeb",
-  "Latitude", "Longitude",
-];
+/**
+ * XML VRSync que o Vista gera para os portais (o mesmo que alimentava o feed
+ * antigo da Jazz). Só traz o que já é público nos portais.
+ */
+export const URL_XML_VISTA = "https://rafaelak-portais.vistahost.com.br/903eaf6e3559adb17a44a470abe5d8a7";
+
 const POR_PAGINA = 50; // máximo aceito pelo /imoveis/listar
 const TENTATIVAS = 3;
 
-async function pagina(n, { chave, base }) {
-  const pesquisa = JSON.stringify({
-    fields: CAMPOS,
-    order: { Codigo: "asc" },
-    paginacao: { pagina: n, quantidade: POR_PAGINA },
-  });
-  const url = `${base}/imoveis/listar?showtotal=1&key=${encodeURIComponent(chave)}&pesquisa=${encodeURIComponent(pesquisa)}`;
+async function comTentativas(rotulo, fn) {
   for (let t = 1; t <= TENTATIVAS; t++) {
     try {
-      const r = await fetch(url, { headers: { Accept: "application/json" } });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      return await r.json();
+      return await fn();
     } catch (e) {
-      if (t === TENTATIVAS) throw new Error(`página ${n}: ${e.message}`);
+      if (t === TENTATIVAS) throw new Error(`${rotulo}: ${e.message}`);
       await new Promise((ok) => setTimeout(ok, 1500 * t));
     }
   }
 }
 
+/** Baixa o XML do Vista e confere que veio inteiro. */
+export async function baixarXmlVista(url = URL_XML_VISTA) {
+  return comTentativas("XML do Vista", async () => {
+    const r = await fetch(url, { headers: { Accept: "application/xml" } });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const xml = await r.text();
+    if (!xml.includes("<ListingDataFeed") || !xml.trimEnd().endsWith("</ListingDataFeed>")) {
+      throw new Error("arquivo incompleto ou fora do formato VRSync");
+    }
+    return xml;
+  });
+}
+
+async function pagina(n, { chave, base }) {
+  const pesquisa = JSON.stringify({
+    fields: ["Codigo"],
+    order: { Codigo: "asc" },
+    paginacao: { pagina: n, quantidade: POR_PAGINA },
+  });
+  const url = `${base}/imoveis/listar?showtotal=1&key=${encodeURIComponent(chave)}&pesquisa=${encodeURIComponent(pesquisa)}`;
+  return comTentativas(`página ${n} da API`, async () => {
+    const r = await fetch(url, { headers: { Accept: "application/json" } });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
+  });
+}
+
 /**
- * Baixa todas as páginas. `paralelo` páginas por vez: 94 páginas em série
- * passam do limite de 30 s de uma função agendada do Netlify.
+ * Códigos que a API do Vista reconhece agora. `paralelo` páginas por vez.
+ * Lança erro se a API entregar menos de 98% do que declara: um conjunto
+ * incompleto faria imóveis ativos sumirem do feed.
  */
-export async function baixarAcervo({ chave, base, paralelo = 8 }) {
+export async function baixarAtivos({ chave, base, paralelo = 8 }) {
   if (!chave) throw new Error("VISTA_API_KEY não informada");
   const opcoes = { chave, base: (base || "https://rafaelak-rest.vistahost.com.br").replace(/\/+$/, "") };
   const primeira = await pagina(1, opcoes);
   const total = Number(primeira.total);
   const paginas = Number(primeira.paginas);
   if (!Number.isFinite(total) || !Number.isFinite(paginas) || total <= 0) {
-    throw new Error(`o Vista não informou total/páginas: ${JSON.stringify(primeira).slice(0, 200)}`);
+    throw new Error("a API do Vista não informou total/páginas");
   }
-
   const respostas = [primeira];
   let proxima = 2;
   const trabalhador = async () => {
-    while (proxima <= paginas) {
-      const n = proxima++;
-      respostas.push(await pagina(n, opcoes));
-    }
+    while (proxima <= paginas) respostas.push(await pagina(proxima++, opcoes));
   };
   await Promise.all(Array.from({ length: Math.min(paralelo, Math.max(0, paginas - 1)) }, trabalhador));
 
-  const itens = [];
-  for (const resp of respostas) {
-    for (const [k, v] of Object.entries(resp)) if (/^\d+$/.test(k) && v && typeof v === "object") itens.push(v);
+  const ativos = new Set();
+  for (const resp of respostas) for (const k of Object.keys(resp)) if (/^\d+$/.test(k)) ativos.add(k);
+  if (ativos.size < total * 0.98) {
+    throw new Error(`API entregou ${ativos.size} de ${total} códigos`);
   }
-  return { total, paginas, itens };
+  return ativos;
 }
 
 /**
- * Baixa, confere e monta. Lança erro (e não devolve XML nenhum) se o Vista
- * entregou menos de 98% do que declarou ou se o feed ficou abaixo do piso:
- * um feed curto publicado tira anúncio do ar; um erro mantém o anterior.
+ * Pipeline completo. Lança erro (e não devolve XML) se o arquivo do Vista
+ * não vier ou se o resultado ficar abaixo do piso.
  */
-export async function gerarXml({ chave, base, minimo = 1000, contato, paralelo }) {
-  const { total, paginas, itens } = await baixarAcervo({ chave, base, paralelo });
-  if (itens.length < total * 0.98) {
-    throw new Error(`Vista entregou ${itens.length} de ${total} imóveis. Feed incompleto não é publicado.`);
+export async function gerarFeed({ chave, base, urlXml, minimo = 1000, minFotos = 7, maximo = 3000 }) {
+  const xmlVista = await baixarXmlVista(urlXml);
+  let ativos = null;
+  let erroApi = null;
+  try {
+    ativos = await baixarAtivos({ chave, base });
+  } catch (e) {
+    erroApi = e.message;
   }
-  const { xml, publicados, excluidos } = montarFeed(itens, { contato });
-  if (publicados < minimo) {
-    throw new Error(`só ${publicados} anúncios (piso ${minimo}). Nada foi publicado.`);
+  const r = ajustar(xmlVista, { ativos, minFotos, maximo });
+  if (erroApi) r.avisos.push(`API: ${erroApi}`);
+  if (r.publicados < minimo) {
+    throw new Error(`só ${r.publicados} anúncios (piso ${minimo}). Nada foi publicado.`);
   }
-  return { xml, publicados, excluidos, total, recebidos: itens.length, paginas };
+  return { ...r, ativosNaApi: ativos ? ativos.size : null };
 }

@@ -1,0 +1,48 @@
+# Publica o Worker `jazz-feed-vrsync` na Cloudflare, que mantém a URL antiga
+# dos portais (https://jazz-feed-vrsync.pablo-jazzimob.workers.dev/vrsync.xml)
+# servindo o XML gerado por este repositório.
+#
+# SEGREDOS (Settings → Secrets and variables → Actions):
+#   CLOUDFLARE_API_TOKEN   token com permissão "Edit Cloudflare Workers"
+#   CLOUDFLARE_ACCOUNT_ID  ID da conta (Cloudflare → Workers → barra lateral)
+
+name: Publicar Worker na Cloudflare
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "worker/**"
+      - ".github/workflows/deploy-worker.yml"
+  pull_request:
+    paths:
+      - "worker/**"
+      - ".github/workflows/deploy-worker.yml"
+  workflow_dispatch: {}
+
+jobs:
+  publicar:
+    name: Testar e publicar o Worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Testar o Worker
+        run: node worker/teste.mjs
+
+      - name: Publicar
+        if: github.event_name != 'pull_request'
+        working-directory: worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::warning::Faltam os segredos CLOUDFLARE_API_TOKEN e/ou CLOUDFLARE_ACCOUNT_ID: Worker testado, mas não publicado. Depois de cadastrar, rode este fluxo em Actions → Run workflow."
+            exit 0
+          fi
+          npx --yes wrangler@4 deploy
