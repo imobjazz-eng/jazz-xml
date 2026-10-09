@@ -9,11 +9,16 @@ gerado de hora em hora direto da API do Vista.
 
 1. `.github/workflows/feed-vrsync.yml` roda de hora em hora (minuto 17).
 2. `gerador/vista.mjs` baixa o XML VRSync que o próprio Vista gera para os portais (todas as fotos, características, condomínio, IPTU, endereço sem número) e a lista de códigos ativos da API do Vista.
-3. `gerador/espelho.mjs` aplica três regras sobre o XML do Vista, sem inventar nenhum dado:
+3. `gerador/espelho.mjs` aplica quatro regras sobre o XML do Vista, sem inventar nenhum dado:
    - sai quem a API não reconhece mais (a API é em tempo real; o arquivo do Vista é gerado uma vez por dia);
    - sai quem tem menos de `FEED_MIN_FOTOS` fotos (padrão 7, como no feed antigo);
+   - sai preço de venda fora de R$ 15 mil a R$ 150 milhões (limite do Grupo ZAP; os códigos vão para o aviso do log para correção no Vista);
    - no máximo `FEED_MAXIMO` anúncios (padrão 3000, como no feed antigo), priorizando quem tem mais fotos.
-4. O XML é validado (parser do Python) e publicado no branch `gh-pages` (GitHub Pages).
+4. `gerador/enriquecer.mjs` refaz o enriquecimento do feed antigo, só com dados do próprio anúncio:
+   - **título**: até 100 caracteres sem cortar palavra, sem espaço duplo nem hífen grudado, sem caixa alta, sem abreviação (`apto`, `2 dorm`), sem jargão ("excelente oportunidade"), sem contato, e sempre dizendo se é venda ou aluguel ("Sobrado Triplex à venda com 3 dormitórios");
+   - **descrição**: `&amp;` corrigido, frase com telefone/e-mail/site removida (proibido no portal), linha em caixa alta vira frase normal (preservando siglas, cidades e bairros), até 3000 caracteres cortando em frase inteira; descrição com menos de 900 caracteres ganha a ficha do imóvel (áreas, quartos, banheiros, vagas, ano, diferenciais, local);
+   - **coordenadas**: o pino padrão do Vista no centro do Brasil é descartado; anúncio sem coordenada recebe a da rua, geocodificada no OpenStreetMap (`gerador/geocodificar.mjs`) com as conferências do feed antigo: mesma cidade, mesma rua, dentro do estado. Até `GEO_LIMITE` endereços novos por hora, 1 consulta por segundo, com cache em `geocode.json`.
+5. O XML é validado (parser do Python) e publicado no branch `gh-pages` (GitHub Pages), junto com o cache de geocodificação.
 
 ## Travas
 
@@ -37,6 +42,7 @@ no portal; feed vazio ou truncado derruba.
 | Variables | `FEED_MIN_FOTOS` | não (padrão 7) |
 | Variables | `FEED_MAXIMO` | não (padrão 3000) |
 | Variables | `VISTA_XML_URL` | não (padrão: XML de portais do Vista) |
+| Variables | `GEO_LIMITE` | não (padrão 200 endereços novos por execução) |
 
 ## Rodar local
 
