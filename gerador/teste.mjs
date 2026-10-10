@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ajustar, separar } from "./espelho.mjs";
-import { enriquecerTitulo, enriquecerDescricao, enriquecerAnuncio, enriquecerFeed, enderecosSemCoordenada, chaveEndereco, lerAnuncio } from "./enriquecer.mjs";
+import { enriquecerTitulo, enriquecerDescricao, enriquecerAnuncio, enriquecerFeed, enderecosSemCoordenada, chaveEndereco, lerAnuncio, usoDe, linkYoutubeValido, pendencias, planilhaPendencias } from "./enriquecer.mjs";
 import { escolherResultado, geocodificar, precisaConsultar, mesmaVia } from "./geocodificar.mjs";
 
 const aqui = dirname(fileURLToPath(import.meta.url));
@@ -140,6 +140,23 @@ let f = enriquecerFeed(feed([["100", 8], ["200", 9]]));
 ok("feed enriquecido continua XML válido e na mesma ordem", ids(f.xml).join() === "100,200" && f.xml.trimEnd().endsWith("</ListingDataFeed>"));
 { const b = enriquecerAnuncio(comLocal()).bloco; ok("']]>' vindo de entidade não fecha o CDATA antes da hora", b.includes("Texto ]] >") && (b.match(/\]\]>/g) || []).length === (b.match(/<!\[CDATA\[/g) || []).length, b); }
 
+console.log("enriquecer.mjs — UsageType, vídeo e pendências");
+const comTipo = (tipo) => listing("700", 8).replace("<Description>", `<PropertyType>${tipo}</PropertyType>\n        <Description>`);
+e = enriquecerAnuncio(comTipo("Commercial / Office"));
+ok("UsageType vem do PropertyType, logo antes dele", e.mudou.uso && /<UsageType>Commercial<\/UsageType>\n {8}<PropertyType>Commercial \/ Office/.test(e.bloco), e.bloco);
+ok("UsageType não duplica", (enriquecerAnuncio(e.bloco).bloco.match(/<UsageType>/g) || []).length === 1);
+ok("tipo desconhecido não ganha UsageType", usoDe("Outro") === null && !enriquecerAnuncio(comTipo("Outro")).mudou.uso);
+const yt = "https://www.youtube.com/watch?v=vFa7524TNbk";
+e = enriquecerAnuncio(listing("700", 8), { videoDe: (c) => (c === "700" ? yt : null) });
+ok("vídeo da lista entra no fim de Media, como o Vista faz", e.mudou.video && e.bloco.includes(`<Item medium="video">${yt}</Item>\n      </Media>`), e.bloco);
+ok("anúncio que já tem vídeo fica com o dele", (enriquecerAnuncio(e.bloco, { videoDe: () => "https://youtu.be/AAAAAAAAAAA" }).bloco.match(/medium="video"/g) || []).length === 1);
+ok("só link do YouTube entra (portal ignora o resto)",
+  linkYoutubeValido(yt) && linkYoutubeValido("https://youtu.be/vFa7524TNbk") && !linkYoutubeValido("https://vimeo.com/123") && !linkYoutubeValido("https://www.youtube.com/shorts/vFa7524TNbk") && !linkYoutubeValido("http://www.youtube.com/watch?v=vFa7524TNbk"));
+const faltas = pendencias(comTipo("Residential / Home"));
+ok("pendências apontam o que só o Vista resolve", ["ano de construção", "área útil", "características", "IPTU", "quartos", "vídeo", "localização no mapa"].every((f) => faltas.includes(f)) && faltas.includes("mais fotos (tem 8)"), faltas.join(", "));
+const planilha = planilhaPendencias(feed([["100", 8]]));
+ok("planilha de pendências abre no Excel (BOM, ';')", planilha.startsWith("\uFEFFcodigo;titulo;pendencias;quantidade") && planilha.includes('"100";'));
+
 console.log("geocodificar.mjs");
 const pedido = { chave: "x", rua: "Rua Dr. Barão de Jaguara", cidade: "Campinas", uf: "SP", estado: "São Paulo" };
 const res = (road, city, lat = "-22.9", lon = "-47.06") => ({ lat, lon, address: { road, city } });
@@ -210,6 +227,7 @@ ok("gera e grava", rodar({ XML_FALSO: arquivo(feed(muitos)), CODIGOS_FALSOS: JSO
 ok("gravou os 120", existsSync(s1) && ids(readFileSync(s1, "utf8")).length === 120);
 ok("gravou o cache de geocodificação ao lado", existsSync(join(dir, "a", "geocode.json")));
 ok("título enriquecido no arquivo final", readFileSync(s1, "utf8").includes("<Title><![CDATA["));
+ok("planilha de pendências gravada ao lado", existsSync(join(dir, "a", "pendencias.csv")));
 
 const s2 = join(dir, "b", "vrsync.xml");
 ok("XML do Vista truncado: erro e nada gravado",

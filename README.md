@@ -18,7 +18,18 @@ gerado de hora em hora direto da API do Vista.
    - **título**: até 100 caracteres sem cortar palavra, sem espaço duplo nem hífen grudado, sem caixa alta, sem abreviação (`apto`, `2 dorm`), sem jargão ("excelente oportunidade"), sem contato, e sempre dizendo se é venda ou aluguel ("Sobrado Triplex à venda com 3 dormitórios");
    - **descrição**: `&amp;` corrigido, frase com telefone/e-mail/site removida (proibido no portal), linha em caixa alta vira frase normal (preservando siglas, cidades e bairros), até 3000 caracteres cortando em frase inteira; descrição com menos de 900 caracteres ganha a ficha do imóvel (áreas, quartos, banheiros, vagas, ano, diferenciais, local);
    - **coordenadas**: o pino padrão do Vista no centro do Brasil é descartado; anúncio sem coordenada recebe a da rua, geocodificada no OpenStreetMap (`gerador/geocodificar.mjs`) com as conferências do feed antigo: mesma cidade, mesma rua, dentro do estado. Até `GEO_LIMITE` endereços novos por hora, 1 consulta por segundo, com cache em `geocode.json`.
+   - **UsageType** (Residencial/Comercial), campo do VRSync que o Vista não exporta, tirado do próprio tipo do imóvel;
+   - **vídeo**: anúncio sem vídeo recebe o link do YouTube da lista publicada pelo repositório `imobjazz-eng/jazz-videos` (`VIDEOS_URL`). Só link do YouTube, um por anúncio, como o portal exige. A geração dos vídeos e o YouTube ficam todos lá; aqui só se lê a lista.
 5. O XML é validado (parser do Python) e publicado no branch `gh-pages` (GitHub Pages), junto com o cache de geocodificação.
+
+## Pendências para a nota máxima
+
+`pendencias.csv` (publicado ao lado do XML, abre no Excel) lista por anúncio o
+que falta e só o Vista pode resolver: ano de construção, área útil,
+características, IPTU, quartos, fotos (menos de 15), vídeo, localização.
+Nada disso é preenchido pelo gerador: seria inventar dado.
+
+https://imobjazz-eng.github.io/jazz-conecta/pendencias.csv
 
 ## Travas
 
@@ -42,6 +53,7 @@ no portal; feed vazio ou truncado derruba.
 | Variables | `FEED_MIN_FOTOS` | não (padrão 7) |
 | Variables | `FEED_MAXIMO` | não (padrão 3000) |
 | Variables | `VISTA_XML_URL` | não (padrão: XML de portais do Vista) |
+| Variables | `VIDEOS_URL` | não (padrão: lista do jazz-videos) |
 | Variables | `GEO_LIMITE` | não (padrão 200 endereços novos por execução) |
 
 ## Rodar local
