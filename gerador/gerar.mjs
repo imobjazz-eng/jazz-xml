@@ -27,7 +27,7 @@ import { enriquecerFeed, enderecosSemCoordenada, planilhaPendencias } from "./en
 import { geocodificar, consultaCache } from "./geocodificar.mjs";
 
 const destino = process.argv[2] || "saida/vrsync.xml";
-const VIDEOS_URL = "https://imobjazz-eng.github.io/jazz-videos/videos.json";
+const VIDEOS_URL = "https://raw.githubusercontent.com/imobjazz-eng/jazz-videos/main/videos.json";
 
 /**
  * Links de vídeo por código. Vêm de outro repositório (jazz-videos), que
