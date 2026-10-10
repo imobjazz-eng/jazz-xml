@@ -1,9 +1,12 @@
-# jazz-conecta
+# jazz-xml
 
 Feed XML (VRSync) dos imóveis da Jazz para os portais (Canal Pró / Grupo ZAP),
 gerado de hora em hora direto da API do Vista.
 
-**URL do feed:** https://imobjazz-eng.github.io/jazz-conecta/vrsync.xml
+Projeto separado do Jazz Conecta (a plataforma), que fica em
+`imobjazz-eng/jazz-lead-conecta`. Este repositório só gera o XML.
+
+**URL do feed:** https://imobjazz-eng.github.io/jazz-xml/vrsync.xml
 
 ## Como funciona
 
@@ -29,7 +32,7 @@ que falta e só o Vista pode resolver: ano de construção, área útil,
 características, IPTU, quartos, fotos (menos de 15), vídeo, localização.
 Nada disso é preenchido pelo gerador: seria inventar dado.
 
-https://imobjazz-eng.github.io/jazz-conecta/pendencias.csv
+https://imobjazz-eng.github.io/jazz-xml/pendencias.csv
 
 ## Travas
 

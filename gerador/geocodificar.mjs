@@ -17,7 +17,7 @@
 import { coordenadaPlausivel } from "./enriquecer.mjs";
 
 export const NOMINATIM = "https://nominatim.openstreetmap.org/search";
-const USER_AGENT = "jazz-conecta-feed/1.0 (+https://github.com/imobjazz-eng/jazz-conecta)";
+const USER_AGENT = "jazz-xml-feed/1.0 (+https://github.com/imobjazz-eng/jazz-xml)";
 const RETENTAR_DIAS = 30;
 
 const normalizar = (s) => (s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();

@@ -1,7 +1,7 @@
 # Gera o XML dos portais (VRSync: Canal Pró / Grupo ZAP) de hora em hora e
 # publica no GitHub Pages:
 #
-#   https://imobjazz-eng.github.io/jazz-conecta/vrsync.xml
+#   https://imobjazz-eng.github.io/jazz-xml/vrsync.xml
 #
 # COMO. Base: o XML VRSync completo que o próprio Vista gera para os portais
 # (fotos, características, condomínio, IPTU). Sobre ele: sai quem a API do
