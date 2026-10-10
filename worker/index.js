@@ -16,7 +16,7 @@
  * feed velho mantém o anúncio no ar; erro o derruba.
  */
 
-const ORIGEM = "https://imobjazz-eng.github.io/jazz-conecta/vrsync.xml";
+const ORIGEM = "https://imobjazz-eng.github.io/jazz-xml/vrsync.xml";
 const CHAVE_COPIA = "https://copia-boa.jazz-feed-vrsync/vrsync.xml";
 const CABECALHOS = {
   "Content-Type": "application/xml; charset=utf-8",
