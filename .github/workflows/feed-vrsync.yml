@@ -86,6 +86,7 @@ jobs:
         env:
           GEOCODE_CACHE: cache/geocode.json
           GEO_LIMITE: ${{ vars.GEO_LIMITE || '200' }}
+          VIDEOS_URL: ${{ vars.VIDEOS_URL }}
           VISTA_API_KEY: ${{ secrets.VISTA_API_KEY }}
           VISTA_XML_URL: ${{ vars.VISTA_XML_URL }}
           FEED_MINIMO: ${{ vars.FEED_MINIMO || '1000' }}

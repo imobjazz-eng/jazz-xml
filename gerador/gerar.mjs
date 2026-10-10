@@ -14,6 +14,8 @@
  *                   o atualizado é gravado como geocode.json ao lado do XML
  *   GEO_LIMITE      endereços novos consultados por execução (padrão 200)
  *   GEO_INTERVALO_MS pausa entre consultas ao Nominatim (padrão 1100)
+ *   VIDEOS_URL      lista "código → link do YouTube" publicada pelo
+ *                   repositório de vídeos (padrão: imobjazz-eng/jazz-videos)
  *
  * Se qualquer trava disparar, sai com erro e NÃO grava nada: o arquivo
  * anterior continua no ar.
@@ -21,10 +23,30 @@
 import { writeFile, mkdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { gerarFeed } from "./vista.mjs";
-import { enriquecerFeed, enderecosSemCoordenada } from "./enriquecer.mjs";
+import { enriquecerFeed, enderecosSemCoordenada, planilhaPendencias } from "./enriquecer.mjs";
 import { geocodificar, consultaCache } from "./geocodificar.mjs";
 
 const destino = process.argv[2] || "saida/vrsync.xml";
+const VIDEOS_URL = "https://imobjazz-eng.github.io/jazz-videos/videos.json";
+
+/**
+ * Links de vídeo por código. Vêm de outro repositório (jazz-videos), que
+ * gera os vídeos e cuida do YouTube; aqui só se lê a lista pronta.
+ * Qualquer falha devolve lista vazia: vídeo nunca segura o feed.
+ */
+async function carregarVideos(url) {
+  try {
+    const r = await fetch(url, { signal: AbortSignal.timeout(20_000) });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const lista = await r.json();
+    if (!lista || typeof lista !== "object" || Array.isArray(lista)) throw new Error("formato inesperado");
+    return new Map(Object.entries(lista).filter(([, v]) => typeof v === "string"));
+  } catch (e) {
+    console.log(`Lista de vídeos indisponível (${e.message}): feed segue sem vídeos novos.`);
+    return new Map();
+  }
+}
+
 const numero = (v, padrao) => (v !== undefined && v !== "" && Number.isFinite(Number(v)) ? Number(v) : padrao);
 
 try {
@@ -59,7 +81,9 @@ try {
   // Enriquecimento com defeito não derruba o feed: publica o XML sem ele.
   let e;
   try {
-    e = enriquecerFeed(r.xml, { coordenadaDe: consultaCache(cache) });
+    const videos = await carregarVideos(process.env.VIDEOS_URL || VIDEOS_URL);
+    if (videos.size) console.log(`Lista de vídeos: ${videos.size} links.`);
+    e = enriquecerFeed(r.xml, { coordenadaDe: consultaCache(cache), videoDe: (c) => videos.get(c) ?? null });
     console.log("Enriquecimento (anúncios alterados):", e.resumo);
   } catch (err) {
     console.log(`::warning::Enriquecimento falhou, publicando sem ele: ${err.message}`);
@@ -69,6 +93,11 @@ try {
   await mkdir(dirname(destino), { recursive: true });
   await writeFile(destino, e.xml);
   await writeFile(join(dirname(destino), "geocode.json"), JSON.stringify(cache));
+  try {
+    await writeFile(join(dirname(destino), "pendencias.csv"), planilhaPendencias(e.xml));
+  } catch (err) {
+    console.log(`::warning::Planilha de pendências não gerada: ${err.message}`);
+  }
   console.log(`Gravado ${destino} (${(Buffer.byteLength(e.xml) / 1048576).toFixed(1)} MB).`);
 } catch (e) {
   console.error(`ERRO: ${e.message}`);

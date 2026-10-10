@@ -400,7 +400,7 @@ export function enriquecerDescricao(descricao, a, { curta = DESCRICAO_CURTA, max
     .trim();
 
   let ficha = false;
-  if (t.length < curta) {
+  if (t.length < curta && !t.includes("Ficha do imóvel:")) {
     const extra = fichaDoImovel(a);
     if (extra) {
       t = t ? `${t}\n\n${extra}` : extra;
@@ -460,6 +460,72 @@ function trocarCoordenadas(bloco, coord) {
   return b.replace(/(<Location[^>]*>)/, (x) => x + campos("        "));
 }
 
+// ---------------------------------------------------------------- uso e vídeo
+
+/** UsageType do VRSync, tirado do próprio PropertyType ("Residential / Home"). */
+export function usoDe(tipoVrsync) {
+  const m = (tipoVrsync || "").match(/^\s*(Residential|Commercial)\b/);
+  return m ? m[1] : null;
+}
+
+/** O portal só processa vídeo do YouTube (um por anúncio). */
+export function linkYoutubeValido(url) {
+  let u;
+  try { u = new URL(String(url)); } catch { return false; }
+  if (u.protocol !== "https:") return false;
+  const host = u.hostname.replace(/^www\./, "");
+  if (host === "youtu.be") return /^\/[\w-]{11}$/.test(u.pathname);
+  return host === "youtube.com" && u.pathname === "/watch" && /^[\w-]{11}$/.test(u.searchParams.get("v") || "");
+}
+
+function inserirUso(bloco, uso) {
+  if (/<UsageType>/.test(bloco)) return bloco;
+  return bloco.replace(/(\n([ \t]*))<PropertyType>/, (_, quebra, ind) => `${quebra}<UsageType>${uso}</UsageType>${quebra}<PropertyType>`);
+}
+
+function inserirVideo(bloco, url) {
+  if (/<Item[^>]*medium="video"/.test(bloco)) return bloco;
+  const ind = (bloco.match(/\n([ \t]*)<Item[^>]*medium="image"/) || [, "        "])[1];
+  return bloco.replace(/(\n[ \t]*)<\/Media>/, (m, quebra) => `\n${ind}<Item medium="video">${url}</Item>${quebra}</Media>`);
+}
+
+// ---------------------------------------------------------------- pendências
+
+/**
+ * O que falta no anúncio para a nota máxima no portal e só o Vista pode
+ * resolver (nada disso é preenchido aqui: seria inventar).
+ */
+export function pendencias(bloco) {
+  const a = lerAnuncio(bloco);
+  const tipo = valor(bloco, "PropertyType") || "";
+  const terreno = /Land Lot/.test(tipo);
+  const faltas = [];
+  if (!terreno && !a.ano) faltas.push("ano de construção");
+  if (!terreno && !a.areaUtil) faltas.push("área útil");
+  if (!/<Feature>/.test(bloco)) faltas.push("características");
+  if (!(Number(valor(bloco, "YearlyTax")) > 0) && !/<Iptu/.test(bloco)) faltas.push("IPTU");
+  if (/^Residential/.test(tipo) && !terreno && !/Agricultural/.test(tipo) && !a.quartos) faltas.push("quartos");
+  const fotos = (bloco.match(/<Item[^>]*medium="image"/g) || []).length;
+  if (fotos < 15) faltas.push(`mais fotos (tem ${fotos})`);
+  if (!/<Item[^>]*medium="video"/.test(bloco)) faltas.push("vídeo");
+  if (!/<Latitude>/.test(bloco)) faltas.push("localização no mapa");
+  return faltas;
+}
+
+const csv = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+
+/** Planilha de pendências (abre no Excel: separador ";", UTF-8 com BOM). */
+export function planilhaPendencias(xml) {
+  const linhas = ["\uFEFFcodigo;titulo;pendencias;quantidade"];
+  for (const bloco of separar(xml).blocos) {
+    const faltas = pendencias(bloco);
+    if (!faltas.length) continue;
+    const a = lerAnuncio(bloco);
+    linhas.push([csv(a.codigo), csv(a.titulo), csv(faltas.join(", ")), faltas.length].join(";"));
+  }
+  return linhas.join("\r\n") + "\r\n";
+}
+
 // ---------------------------------------------------------------- anúncio
 
 function trocarCdata(bloco, tag, texto) {
@@ -474,9 +540,9 @@ function trocarCdata(bloco, tag, texto) {
  * Enriquece um anúncio. `coordenadaDe(chave)` devolve {lat, lon} do cache de
  * geocodificação, ou null.
  */
-export function enriquecerAnuncio(bloco, { coordenadaDe = () => null, restaurarNomes } = {}) {
+export function enriquecerAnuncio(bloco, { coordenadaDe = () => null, videoDe = () => null, restaurarNomes } = {}) {
   const a = lerAnuncio(bloco);
-  const mudou = { titulo: false, descricao: false, ficha: false, coordenada_adicionada: false, coordenada_descartada: false };
+  const mudou = { titulo: false, descricao: false, ficha: false, coordenada_adicionada: false, coordenada_descartada: false, uso: false, video: false };
   let b = bloco;
 
   const titulo = enriquecerTitulo(a.titulo, a);
@@ -507,13 +573,25 @@ export function enriquecerAnuncio(bloco, { coordenadaDe = () => null, restaurarN
       mudou.coordenada_descartada = true;
     }
   }
+
+  const uso = usoDe(valor(b, "PropertyType"));
+  if (uso) {
+    const novo = inserirUso(b, uso);
+    if (novo !== b) { b = novo; mudou.uso = true; }
+  }
+
+  const video = a.codigo ? videoDe(a.codigo) : null;
+  if (video && linkYoutubeValido(video)) {
+    const novo = inserirVideo(b, video);
+    if (novo !== b) { b = novo; mudou.video = true; }
+  }
   return { bloco: b, mudou };
 }
 
 /** Enriquece o feed inteiro. Cabeçalho, rodapé e ordem ficam como estão. */
 export function enriquecerFeed(xml, opcoes = {}) {
   const { cabecalho, blocos, rodape } = separar(xml);
-  const resumo = { titulo: 0, descricao: 0, ficha: 0, coordenada_adicionada: 0, coordenada_descartada: 0, sem_coordenada: 0 };
+  const resumo = { titulo: 0, descricao: 0, ficha: 0, coordenada_adicionada: 0, coordenada_descartada: 0, uso: 0, video: 0, sem_coordenada: 0 };
   const nomes = blocos.flatMap((b) => [valor(b, "City"), valor(b, "Neighborhood")]);
   const restaurarNomes = restauradorDeNomes(nomes);
   const corpo = blocos.map((bloco) => {
