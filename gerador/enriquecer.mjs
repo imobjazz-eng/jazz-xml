@@ -515,7 +515,7 @@ function inserirNoFim(bloco, pai, xml) {
  * características; ano e IPTU sem dado ficam 2001 e 201, como no XML anterior.
  */
 export function ajustarPadrao(bloco, antigo = {}, { anoPadrao = 2001, iptuPadrao = 201 } = {}) {
-  const mudou = { pais: false, numero: false, ano: false, iptu: false, area_util: false, caracteristicas: false, formato: false };
+  const mudou = { pais: false, rua_visivel: false, numero: false, ano: false, iptu: false, area_util: false, caracteristicas: false, formato: false };
   let b = bloco;
   const tipo = valor(b, "PropertyType") || "";
 
@@ -523,6 +523,13 @@ export function ajustarPadrao(bloco, antigo = {}, { anoPadrao = 2001, iptuPadrao
     const ind = indentacaoFilhos(b, "Location");
     b = b.replace(/(<Location[^>]*>)/, `$1\n${ind}<Country abbreviation="BR">Brasil</Country>`);
     mudou.pais = true;
+  }
+
+  // Endereço só com bairro passa a completo (rua e número reais): endereço
+  // vale 35 dos 100 pontos da nota do Canal Pro. Decisão do Pablo (11/10/2026).
+  if (/<Location displayAddress="Neighborhood"/.test(b) && valor(b, "Address")) {
+    b = b.replace('<Location displayAddress="Neighborhood"', '<Location displayAddress="All"');
+    mudou.rua_visivel = true;
   }
 
   if (!/<StreetNumber>/.test(b) && antigo.numero && /<Address>/.test(b)) {
@@ -718,7 +725,7 @@ export function enriquecerAnuncio(bloco, { coordenadaDe = () => null, videoDe = 
 /** Enriquece o feed inteiro. Cabeçalho, rodapé e ordem ficam como estão. */
 export function enriquecerFeed(xml, opcoes = {}) {
   const { cabecalho, blocos, rodape } = separar(xml);
-  const resumo = { titulo: 0, descricao: 0, ficha: 0, coordenada_adicionada: 0, coordenada_descartada: 0, uso: 0, video: 0, tour: 0, pais: 0, numero: 0, ano: 0, iptu: 0, area_util: 0, caracteristicas: 0, formato: 0, sem_coordenada: 0 };
+  const resumo = { titulo: 0, descricao: 0, ficha: 0, coordenada_adicionada: 0, coordenada_descartada: 0, uso: 0, video: 0, tour: 0, pais: 0, rua_visivel: 0, numero: 0, ano: 0, iptu: 0, area_util: 0, caracteristicas: 0, formato: 0, sem_coordenada: 0 };
   const nomes = blocos.flatMap((b) => [valor(b, "City"), valor(b, "Neighborhood")]);
   const restaurarNomes = restauradorDeNomes(nomes);
   const corpo = blocos.map((bloco) => {
