@@ -13,7 +13,7 @@ import { ajustar, separar } from "./espelho.mjs";
 import { fichaDoImovel, enriquecerTitulo, enriquecerDescricao, enriquecerAnuncio, enriquecerFeed, enderecosSemCoordenada, chaveEndereco, lerAnuncio, usoDe, linkYoutubeValido, pendencias, planilhaPendencias } from "./enriquecer.mjs";
 import { escolherResultado, geocodificar, precisaConsultar, mesmaVia } from "./geocodificar.mjs";
 import { extrairAntigo } from "./antigo.mjs";
-import { ajustarPadrao } from "./enriquecer.mjs";
+import { ajustarPadrao, notaEstimada } from "./enriquecer.mjs";
 import { TOUR_BASE, codigoDoTour, fotosDoAnuncio, dadosDoTour, inserirTour, linkDoTour } from "./tour.mjs";
 
 const aqui = dirname(fileURLToPath(import.meta.url));
@@ -157,7 +157,7 @@ ok("anúncio que já tem vídeo fica com o dele", (enriquecerAnuncio(e.bloco, { 
 ok("só link do YouTube entra (portal ignora o resto)",
   linkYoutubeValido(yt) && linkYoutubeValido("https://youtu.be/vFa7524TNbk") && !linkYoutubeValido("https://vimeo.com/123") && !linkYoutubeValido("https://www.youtube.com/shorts/vFa7524TNbk") && !linkYoutubeValido("http://www.youtube.com/watch?v=vFa7524TNbk"));
 const faltas = pendencias(comTipo("Residential / Home"));
-ok("pendências apontam o que só o Vista resolve", ["ano de construção", "área útil", "características", "IPTU", "quartos", "vídeo", "localização no mapa"].every((f) => faltas.includes(f)) && faltas.includes("mais fotos (tem 8)"), faltas.join(", "));
+ok("pendências apontam o que só o Vista resolve", ["ano de construção", "área útil", "características", "IPTU", "quartos", "vídeo", "localização no mapa"].every((f) => faltas.includes(f)) && faltas.includes("mais fotos (tem 8; o portal pede 20)"), faltas.join(", "));
 const planilha = planilhaPendencias(feed([["100", 8]]));
 ok("planilha de pendências abre no Excel (BOM, ';')", planilha.startsWith("\uFEFFcodigo;titulo;pendencias;quantidade") && planilha.includes('"100";'));
 
@@ -239,6 +239,13 @@ console.log("antigo.mjs e padrão VRSync (documentação do Grupo ZAP)");
   ok("rodar duas vezes não duplica nada", duas === x, duas);
   const feat = ajustarPadrao(base.replace(/<Features>[\s\S]*?<\/Features>/, "<Warranties/>"), ant["900"]).bloco;
   ok("sem características no Vista: as do anterior", feat.includes("<Feature>Pool</Feature>") && feat.includes("<Feature>Maid's Quarters</Feature>"), feat);
+  const comp = ajustarPadrao(base, { numero: "45", complemento: "Apto 12 <bl B>" }).bloco;
+  ok("complemento logo depois do número, em CDATA", comp.includes("<StreetNumber>45</StreetNumber>\n        <Complement><![CDATA[Apto 12 <bl B>]]></Complement>"), comp);
+  ok("sem número não entra complemento", !ajustarPadrao(base, { complemento: "Apto 1" }).bloco.includes("Complement"));
+  ok("nota estimada: endereço com número + 20 fotos + preço = 100", notaEstimada(listing("1", 20).replace("<Location", "<Location><Address>Rua A</Address><StreetNumber>1</StreetNumber></Location><X")) === 100);
+  ok("nota estimada: sem número e 10 fotos", notaEstimada(listing("1", 10).replace("<Location", "<Location><Address>Rua A</Address></Location><X")) === 20 + 25 + 10 + 13 + 7);
+  const sel = ajustar(feed([["1", 30], ["2", 20], ["3", 25]]), { maximo: 2, prioridade: (c) => (c === "1" ? 0 : 100) });
+  ok("teto de 3000 escolhe pela nota estimada, depois fotos", ids(sel.xml).join(",") === "2,3", ids(sel.xml).join(","));
   const vf = enriquecerFeed(feed([["900", 8]]), { antigoDe: (c) => ant[c] ?? null });
   ok("feed: resumo conta o que veio do anterior", vf.resumo.iptu === 1 && vf.resumo.ano === 1 && vf.resumo.pais === 1, JSON.stringify(vf.resumo));
 }
