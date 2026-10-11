@@ -105,6 +105,9 @@ jobs:
       # no ar: feed velho mantém anúncio; feed vazio derruba.
       - name: Publicar no GitHub Pages
         run: |
+          # A página de oportunidades (imóveis de proprietário) sai junto, em
+          # pasta própria: o gh-pages é sobrescrito inteiro a cada publicação.
+          cp -r oportunidades site/oportunidades
           cd site
           touch .nojekyll
           cat > index.html <<HTML
