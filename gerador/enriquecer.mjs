@@ -499,7 +499,16 @@ function inserirVideo(bloco, url) {
 // ---------------------------------------------------------------- padrão VRSync
 
 // Nomes que o Vista exporta fora da lista oficial de Features do VRSync.
-const CARACTERISTICA_OFICIAL = { "Maids Quarters": "Maid's Quarters", BarbecueBalcony: "Barbecue Balcony" };
+// Nomes que o Vista exporta fora da lista oficial de Features do VRSync
+// (developers.grupozap.com): o equivalente da lista, ou null para tirar.
+const CARACTERISTICA_OFICIAL = {
+  "Maids Quarters": "Maid's Quarters",
+  BarbecueBalcony: "Barbecue Balcony",
+  Veranda: "Balcony",
+  Garden: "Garden Area",
+  "Security Guard on Duty": "Patrol",
+  "Exterior View": null,
+};
 const TERRENO = /Land Lot/;
 const DINHEIRO = ["ListPrice", "RentalPrice", "PropertyAdministrationFee", "YearlyTax"];
 const AREAS = ["LivingArea", "LotArea"];
@@ -521,7 +530,7 @@ function inserirNoFim(bloco, pai, xml) {
  * características; ano e IPTU sem dado ficam 2001 e 201, como no XML anterior.
  */
 export function ajustarPadrao(bloco, antigo = {}, { anoPadrao = 2001, iptuPadrao = 201 } = {}) {
-  const mudou = { pais: false, rua_visivel: false, numero: false, complemento: false, ano: false, iptu: false, area_util: false, caracteristicas: false, formato: false };
+  const mudou = { pais: false, bairro: false, rua_visivel: false, numero: false, complemento: false, ano: false, iptu: false, area_util: false, caracteristicas: false, formato: false };
   let b = bloco;
   const tipo = valor(b, "PropertyType") || "";
 
@@ -536,6 +545,14 @@ export function ajustarPadrao(bloco, antigo = {}, { anoPadrao = 2001, iptuPadrao
   if (/<Location displayAddress="Neighborhood"/.test(b) && valor(b, "Address")) {
     b = b.replace('<Location displayAddress="Neighborhood"', '<Location displayAddress="All"');
     mudou.rua_visivel = true;
+  }
+
+  // Bairro faz parte do formato mínimo do portal: sem ele, erro de importação.
+  if (/<Location[^>]*>/.test(b) && !valor(b, "Neighborhood") && antigo.bairro) {
+    const novo = `<Neighborhood><![CDATA[${cdataSeguro(antigo.bairro)}]]></Neighborhood>`;
+    if (elemento("Neighborhood").test(b)) b = b.replace(elemento("Neighborhood"), novo);
+    else b = inserirNoFim(b, "Location", novo);
+    mudou.bairro = true;
   }
 
   if (!/<StreetNumber>/.test(b) && antigo.numero && /<Address>/.test(b)) {
@@ -609,7 +626,15 @@ export function ajustarPadrao(bloco, antigo = {}, { anoPadrao = 2001, iptuPadrao
     b = elemento("Features").test(b) ? b.replace(elemento("Features"), bloco) : inserirNoFim(b, "Details", bloco);
     mudou.caracteristicas = true;
   }
-  const oficial = b.replace(/<Feature>([^<]+)<\/Feature>/g, (m, f) => (CARACTERISTICA_OFICIAL[f.trim()] ? `<Feature>${escaparXml(CARACTERISTICA_OFICIAL[f.trim()])}</Feature>` : m));
+  // Lista oficial, sem repetição (Veranda e Balcony viram a mesma).
+  const vistas = new Set();
+  const oficial = b.replace(/\n[ \t]*<Feature>([^<]+)<\/Feature>/g, (m, f) => {
+    const nome = f.trim();
+    const novo = nome in CARACTERISTICA_OFICIAL ? CARACTERISTICA_OFICIAL[nome] : nome.replace(/&apos;/g, "'");
+    if (!novo || vistas.has(novo)) return "";
+    vistas.add(novo);
+    return m.replace(`<Feature>${f}</Feature>`, `<Feature>${escaparXml(novo)}</Feature>`);
+  });
   if (oficial !== b) { b = oficial; mudou.formato = true; }
 
   return { bloco: b, mudou };
@@ -640,11 +665,30 @@ export function notaEstimada(bloco, { numero = /<StreetNumber>/.test(bloco) } = 
   return endereco + 25 + imagens + preco + 4 + 3;
 }
 
+/**
+ * Campos obrigatórios pela documentação cuja falta faz o portal recusar o
+ * anúncio (erro de importação). `extra` traz o que o gerador completa depois.
+ */
+export function errosObrigatorios(bloco, extra = {}) {
+  const tipo = valor(bloco, "PropertyType") || "";
+  const transacao = valor(bloco, "TransactionType");
+  const terreno = /Land Lot|Farm|Agricultural|Industrial|Warehouse/.test(tipo);
+  const erros = [];
+  if (!terreno && !(Number(valor(bloco, "LivingArea")) >= 1) && !extra.area_util) erros.push("área útil");
+  if (terreno && !(Number(valor(bloco, "LotArea")) >= 1)) erros.push("área total do terreno");
+  if (!/Land Lot|Industrial|Building|Business|Warehouse|Agricultural|Edificio/.test(tipo) && !(Number(valor(bloco, "Bathrooms")) >= 1)) erros.push("banheiros");
+  if (/For Sale|Sale\/Rent/.test(transacao || "") && !(Number(valor(bloco, "ListPrice")) > 0)) erros.push("preço de venda");
+  if (/For Rent|Sale\/Rent/.test(transacao || "") && !(Number(valor(bloco, "RentalPrice")) > 0)) erros.push("preço de aluguel");
+  if (!valor(bloco, "PostalCode")) erros.push("CEP");
+  if (!valor(bloco, "Neighborhood") && !extra.bairro) erros.push("bairro");
+  return erros;
+}
+
 export function pendencias(bloco) {
   const a = lerAnuncio(bloco);
   const tipo = valor(bloco, "PropertyType") || "";
   const terreno = /Land Lot/.test(tipo);
-  const faltas = [];
+  const faltas = errosObrigatorios(bloco).map((e) => `ERRO, o portal recusa sem: ${e}`);
   if (!terreno && !a.ano) faltas.push("ano de construção");
   if (!terreno && !a.areaUtil) faltas.push("área útil");
   if (!/<Feature>/.test(bloco)) faltas.push("características");
@@ -752,7 +796,7 @@ export function enriquecerAnuncio(bloco, { coordenadaDe = () => null, videoDe = 
 /** Enriquece o feed inteiro. Cabeçalho, rodapé e ordem ficam como estão. */
 export function enriquecerFeed(xml, opcoes = {}) {
   const { cabecalho, blocos, rodape } = separar(xml);
-  const resumo = { titulo: 0, descricao: 0, ficha: 0, coordenada_adicionada: 0, coordenada_descartada: 0, uso: 0, video: 0, tour: 0, pais: 0, rua_visivel: 0, numero: 0, complemento: 0, ano: 0, iptu: 0, area_util: 0, caracteristicas: 0, formato: 0, sem_coordenada: 0 };
+  const resumo = { titulo: 0, descricao: 0, ficha: 0, coordenada_adicionada: 0, coordenada_descartada: 0, uso: 0, video: 0, tour: 0, pais: 0, bairro: 0, rua_visivel: 0, numero: 0, complemento: 0, ano: 0, iptu: 0, area_util: 0, caracteristicas: 0, formato: 0, sem_coordenada: 0 };
   const nomes = blocos.flatMap((b) => [valor(b, "City"), valor(b, "Neighborhood")]);
   const restaurarNomes = restauradorDeNomes(nomes);
   const corpo = blocos.map((bloco) => {
@@ -762,5 +806,14 @@ export function enriquecerFeed(xml, opcoes = {}) {
     return r.bloco;
   });
   const indentacao = (cabecalho.match(/\n([ \t]*)$/) || [, ""])[1];
-  return { xml: cabecalho + corpo.join(`\n${indentacao}`) + rodape, resumo };
+  return { xml: headerForaDeListings(cabecalho) + corpo.join(`\n${indentacao}`) + rodape, resumo };
+}
+
+/** O Vista põe o Header dentro de Listings; na documentação ele vem antes. */
+export function headerForaDeListings(cabecalho) {
+  const m = cabecalho.match(/(\n?[ \t]*)<Listings>(\s*)(<Header>[\s\S]*?<\/Header>)(\s*)/);
+  if (!m) return cabecalho;
+  const ind = m[1].replace(/^\n/, "");
+  const header = m[3].replace(/\n[ \t]*/g, (q) => q.slice(0, q.length - 2 > 0 ? q.length - 2 : q.length));
+  return cabecalho.replace(m[0], `\n${ind}${header}\n${ind}<Listings>${m[4]}`);
 }

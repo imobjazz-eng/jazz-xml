@@ -13,7 +13,7 @@ import { ajustar, separar } from "./espelho.mjs";
 import { fichaDoImovel, enriquecerTitulo, enriquecerDescricao, enriquecerAnuncio, enriquecerFeed, enderecosSemCoordenada, chaveEndereco, lerAnuncio, usoDe, linkYoutubeValido, pendencias, planilhaPendencias } from "./enriquecer.mjs";
 import { escolherResultado, geocodificar, precisaConsultar, mesmaVia } from "./geocodificar.mjs";
 import { extrairAntigo } from "./antigo.mjs";
-import { ajustarPadrao, notaEstimada } from "./enriquecer.mjs";
+import { ajustarPadrao, notaEstimada, errosObrigatorios, headerForaDeListings } from "./enriquecer.mjs";
 import { TOUR_BASE, codigoDoTour, fotosDoAnuncio, dadosDoTour, inserirTour, linkDoTour } from "./tour.mjs";
 
 const aqui = dirname(fileURLToPath(import.meta.url));
@@ -246,6 +246,17 @@ console.log("antigo.mjs e padrão VRSync (documentação do Grupo ZAP)");
   ok("nota estimada: sem número e 10 fotos", notaEstimada(listing("1", 10).replace("<Location", "<Location><Address>Rua A</Address></Location><X")) === 20 + 25 + 10 + 13 + 7);
   const sel = ajustar(feed([["1", 30], ["2", 20], ["3", 25]]), { maximo: 2, prioridade: (c) => (c === "1" ? 0 : 100) });
   ok("teto de 3000 escolhe pela nota estimada, depois fotos", ids(sel.xml).join(",") === "2,3", ids(sel.xml).join(","));
+  const feats = ajustarPadrao(base.replace("<Feature>Maids Quarters</Feature>", "<Feature>Veranda</Feature>\n          <Feature>Balcony</Feature>\n          <Feature>Exterior View</Feature>\n          <Feature>Security Guard on Duty</Feature>")).bloco;
+  ok("Features: Veranda vira Balcony sem repetir, Exterior View sai, vigilância vira Patrol", (feats.match(/<Feature>Balcony<\/Feature>/g) || []).length === 1 && !feats.includes("Exterior View") && feats.includes("<Feature>Patrol</Feature>") && !feats.includes("Veranda"), feats);
+  const semBairro = ajustarPadrao(base, { bairro: "Centro" }).bloco;
+  ok("bairro do XML anterior quando o Vista não manda", semBairro.includes("<Neighborhood><![CDATA[Centro]]></Neighborhood>"), semBairro);
+  ok("bairro do Vista fica", !ajustarPadrao(base.replace("</Location>", "  <Neighborhood><![CDATA[Vila A]]></Neighborhood>\n      </Location>"), { bairro: "Centro" }).bloco.includes("Centro"));
+  const err = errosObrigatorios(base);
+  ok("obrigatórios: área útil, banheiros, CEP e bairro apontados", ["área útil", "banheiros", "CEP", "bairro"].every((e) => err.includes(e)) && !err.includes("preço de venda"), err.join(", "));
+  ok("área útil e bairro que o gerador completa não contam como erro", !errosObrigatorios(base, { area_util: 50, bairro: "X" }).includes("área útil") && !errosObrigatorios(base, { area_util: 50, bairro: "X" }).includes("bairro"));
+  const cab = `<?xml version="1.0"?>\n<ListingDataFeed>\n  <Listings>\n    <Header>\n      <Provider>Vista</Provider>\n    </Header>\n    `;
+  ok("Header sai de dentro de Listings (como na documentação)", headerForaDeListings(cab) === `<?xml version="1.0"?>\n<ListingDataFeed>\n  <Header>\n    <Provider>Vista</Provider>\n  </Header>\n  <Listings>\n    `, JSON.stringify(headerForaDeListings(cab)));
+  ok("feed: Header antes de Listings e XML ainda separável", /<\/Header>\s*<Listings>/.test(enriquecerFeed(feed([["901", 8]])).xml) && separar(enriquecerFeed(feed([["901", 8]])).xml).blocos.length === 1);
   const vf = enriquecerFeed(feed([["900", 8]]), { antigoDe: (c) => ant[c] ?? null });
   ok("feed: resumo conta o que veio do anterior", vf.resumo.iptu === 1 && vf.resumo.ano === 1 && vf.resumo.pais === 1, JSON.stringify(vf.resumo));
 }
