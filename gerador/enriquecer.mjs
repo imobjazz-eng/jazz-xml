@@ -521,7 +521,7 @@ function inserirNoFim(bloco, pai, xml) {
  * características; ano e IPTU sem dado ficam 2001 e 201, como no XML anterior.
  */
 export function ajustarPadrao(bloco, antigo = {}, { anoPadrao = 2001, iptuPadrao = 201 } = {}) {
-  const mudou = { pais: false, rua_visivel: false, numero: false, ano: false, iptu: false, area_util: false, caracteristicas: false, formato: false };
+  const mudou = { pais: false, rua_visivel: false, numero: false, complemento: false, ano: false, iptu: false, area_util: false, caracteristicas: false, formato: false };
   let b = bloco;
   const tipo = valor(b, "PropertyType") || "";
 
@@ -541,6 +541,11 @@ export function ajustarPadrao(bloco, antigo = {}, { anoPadrao = 2001, iptuPadrao
   if (!/<StreetNumber>/.test(b) && antigo.numero && /<Address>/.test(b)) {
     b = b.replace(linhaDoElemento("Address"), (m) => `${m}${m.match(/^\n[ \t]*/)[0]}<StreetNumber>${antigo.numero}</StreetNumber>`);
     mudou.numero = true;
+  }
+  // Complemento (apto, bloco): a documentação recomenda e diz que não aparece no portal.
+  if (!/<Complement>/.test(b) && antigo.complemento && /<StreetNumber>/.test(b)) {
+    b = b.replace(linhaDoElemento("StreetNumber"), (m) => `${m}${m.match(/^\n[ \t]*/)[0]}<Complement><![CDATA[${cdataSeguro(antigo.complemento)}]]></Complement>`);
+    mudou.complemento = true;
   }
 
   // Valores: só a parte inteira, com currency="BRL" (condomínio menor que 1
@@ -620,6 +625,21 @@ function escaparXml(t) {
  * O que falta no anúncio para a nota máxima no portal e só o Vista pode
  * resolver (nada disso é preenchido aqui: seria inventar).
  */
+/**
+ * Nota estimada no Canal Pro (0 a 100), pelos pesos do relatório de 11/10:
+ * endereço 35, descrição 25, imagens 20, preço 13, tour 4, vídeo 3.
+ * Descrição, vídeo e tour o gerador completa em todo anúncio publicado.
+ * `numero` diz se há número do endereço (XML ou fonte externa).
+ */
+export function notaEstimada(bloco, { numero = /<StreetNumber>/.test(bloco) } = {}) {
+  const fotos = (bloco.match(/<Item[^>]*medium="image"/g) || []).length;
+  const rua = !!valor(bloco, "Address");
+  const endereco = rua && numero ? 35 : rua ? 20 : 0;
+  const imagens = Math.min(fotos, 20);
+  const preco = Number(valor(bloco, "ListPrice")) > 0 || Number(valor(bloco, "RentalPrice")) > 0 ? 13 : 0;
+  return endereco + 25 + imagens + preco + 4 + 3;
+}
+
 export function pendencias(bloco) {
   const a = lerAnuncio(bloco);
   const tipo = valor(bloco, "PropertyType") || "";
@@ -631,7 +651,8 @@ export function pendencias(bloco) {
   if (!(Number(valor(bloco, "YearlyTax")) > 0) && !/<Iptu/.test(bloco)) faltas.push("IPTU");
   if (/^Residential/.test(tipo) && !terreno && !/Agricultural/.test(tipo) && !a.quartos) faltas.push("quartos");
   const fotos = (bloco.match(/<Item[^>]*medium="image"/g) || []).length;
-  if (fotos < 15) faltas.push(`mais fotos (tem ${fotos})`);
+  if (fotos < 20) faltas.push(`mais fotos (tem ${fotos}; o portal pede 20)`);
+  if (valor(bloco, "Address") && !/<StreetNumber>/.test(bloco)) faltas.push("número do endereço");
   if (!/<Item[^>]*medium="video"/.test(bloco)) faltas.push("vídeo");
   if (!/<Latitude>/.test(bloco)) faltas.push("localização no mapa");
   return faltas;
@@ -641,12 +662,12 @@ const csv = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
 
 /** Planilha de pendências (abre no Excel: separador ";", UTF-8 com BOM). */
 export function planilhaPendencias(xml) {
-  const linhas = ["\uFEFFcodigo;titulo;pendencias;quantidade"];
+  const linhas = ["\uFEFFcodigo;titulo;pendencias;quantidade;nota_estimada"];
   for (const bloco of separar(xml).blocos) {
     const faltas = pendencias(bloco);
     if (!faltas.length) continue;
     const a = lerAnuncio(bloco);
-    linhas.push([csv(a.codigo), csv(a.titulo), csv(faltas.join(", ")), faltas.length].join(";"));
+    linhas.push([csv(a.codigo), csv(a.titulo), csv(faltas.join(", ")), faltas.length, notaEstimada(bloco)].join(";"));
   }
   return linhas.join("\r\n") + "\r\n";
 }
@@ -731,7 +752,7 @@ export function enriquecerAnuncio(bloco, { coordenadaDe = () => null, videoDe = 
 /** Enriquece o feed inteiro. Cabeçalho, rodapé e ordem ficam como estão. */
 export function enriquecerFeed(xml, opcoes = {}) {
   const { cabecalho, blocos, rodape } = separar(xml);
-  const resumo = { titulo: 0, descricao: 0, ficha: 0, coordenada_adicionada: 0, coordenada_descartada: 0, uso: 0, video: 0, tour: 0, pais: 0, rua_visivel: 0, numero: 0, ano: 0, iptu: 0, area_util: 0, caracteristicas: 0, formato: 0, sem_coordenada: 0 };
+  const resumo = { titulo: 0, descricao: 0, ficha: 0, coordenada_adicionada: 0, coordenada_descartada: 0, uso: 0, video: 0, tour: 0, pais: 0, rua_visivel: 0, numero: 0, complemento: 0, ano: 0, iptu: 0, area_util: 0, caracteristicas: 0, formato: 0, sem_coordenada: 0 };
   const nomes = blocos.flatMap((b) => [valor(b, "City"), valor(b, "Neighborhood")]);
   const restaurarNomes = restauradorDeNomes(nomes);
   const corpo = blocos.map((bloco) => {

@@ -28,7 +28,7 @@
 import { writeFile, mkdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { gerarFeed } from "./vista.mjs";
-import { enriquecerFeed, enderecosSemCoordenada, planilhaPendencias, linkYoutubeValido } from "./enriquecer.mjs";
+import { enriquecerFeed, enderecosSemCoordenada, planilhaPendencias, linkYoutubeValido, notaEstimada } from "./enriquecer.mjs";
 import { TOUR_BASE, TOUR_MIN_FOTOS, codigoDoTour, dadosDoTour, linkDoTour } from "./tour.mjs";
 import { geocodificar, consultaCache } from "./geocodificar.mjs";
 import { ANTIGO_URL, extrairAntigo } from "./antigo.mjs";
@@ -82,7 +82,12 @@ async function carregarAntigo(arquivo, url) {
 const numero = (v, padrao) => (v !== undefined && v !== "" && Number.isFinite(Number(v)) ? Number(v) : padrao);
 
 try {
+  // Dados do XML anterior antes da seleção: o número do endereço entra na
+  // nota estimada que escolhe os 3000 anúncios.
+  const antigo = await carregarAntigo(process.env.ANTIGO_CACHE, process.env.ANTIGO_URL || ANTIGO_URL);
+  console.log(`XML anterior: ${Object.keys(antigo).length} anúncios com dados.`);
   const r = await gerarFeed({
+    prioridade: (codigo, bloco, enderecos) => notaEstimada(bloco, { numero: !!(enderecos.get(codigo)?.numero || antigo[codigo]?.numero) }),
     chave: process.env.VISTA_API_KEY,
     base: process.env.VISTA_API_URL,
     urlXml: process.env.VISTA_XML_URL || undefined,
@@ -113,7 +118,6 @@ try {
   // Enriquecimento com defeito não derruba o feed: publica o XML sem ele.
   let e;
   const tours = new Map();
-  let antigo = {};
   try {
     const videos = await carregarVideos(process.env.VIDEOS_URL || VIDEOS_URL);
     if (videos.size) console.log(`Lista de vídeos: ${videos.size} links.`);
@@ -136,9 +140,12 @@ try {
       const v = videos.get(c);
       return v && linkYoutubeValido(v) ? v : videoPadrao;
     };
-    antigo = await carregarAntigo(process.env.ANTIGO_CACHE, process.env.ANTIGO_URL || ANTIGO_URL);
-    console.log(`XML anterior: ${Object.keys(antigo).length} anúncios com dados.`);
-    const antigoDe = (c) => antigo[c] ?? null;
+    // Número e complemento: a API do Vista primeiro, o XML anterior depois.
+    console.log(`Endereços pela API do Vista: ${r.enderecos?.size ?? 0} com número ou complemento.`);
+    const antigoDe = (c) => {
+      const api = r.enderecos?.get(c);
+      return antigo[c] || api ? { ...antigo[c], ...api } : null;
+    };
     e = enriquecerFeed(r.xml, { coordenadaDe: consultaCache(cache), videoDe, tourDe, antigoDe });
     console.log("Enriquecimento (anúncios alterados):", e.resumo);
   } catch (err) {

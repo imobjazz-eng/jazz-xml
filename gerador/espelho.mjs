@@ -15,7 +15,8 @@
  *     milhões, regra do feed antigo) sai: é erro de digitação no Vista
  *     (R$ 40 bilhões, R$ 745) e o código vai para o aviso do log.
  *  4. Teto de anúncios (padrão 3000, regra do feed antigo), priorizando
- *     quem tem mais fotos.
+ *     a maior nota estimada no Canal Pro (`prioridade`, ver gerar.mjs) e,
+ *     no empate, quem tem mais fotos.
  *
  * Nada é inventado: nenhum campo ausente é preenchido com valor padrão.
  * Sem rede aqui; quem baixa é o `gerar.mjs`.
@@ -67,7 +68,7 @@ export function separar(xml) {
  *                  acervo de uma vez é sintoma de API com problema, não de
  *                  imóveis desativados.
  */
-export function ajustar(xml, { ativos = null, minFotos = 7, maximo = 3000, limiteRemocao = 0.1, agora = new Date() } = {}) {
+export function ajustar(xml, { ativos = null, minFotos = 7, maximo = 3000, limiteRemocao = 0.1, agora = new Date(), prioridade = null } = {}) {
   const { cabecalho, blocos, rodape } = separar(xml);
   const excluidos = { inativo_no_vista: 0, poucas_fotos: 0, preco_fora_do_padrao: 0, acima_do_limite: 0, sem_codigo: 0 };
   const avisos = [];
@@ -102,8 +103,11 @@ export function ajustar(xml, { ativos = null, minFotos = 7, maximo = 3000, limit
   }
 
   if (itens.length > maximo) {
-    // Mais fotos primeiro; empate pelo código, para a seleção ser estável.
-    const ordem = [...itens].sort((a, b) => b.fotos - a.fotos || a.codigo.localeCompare(b.codigo, "pt", { numeric: true }));
+    // Maior nota estimada, depois mais fotos; empate pelo código, para a
+    // seleção ser estável.
+    const nota = (i) => (prioridade ? prioridade(i.codigo, i.bloco) : 0);
+    for (const i of itens) i.nota = nota(i);
+    const ordem = [...itens].sort((a, b) => b.nota - a.nota || b.fotos - a.fotos || a.codigo.localeCompare(b.codigo, "pt", { numeric: true }));
     const ficam = new Set(ordem.slice(0, maximo).map((i) => i.codigo));
     excluidos.acima_do_limite = itens.length - maximo;
     itens = itens.filter((i) => ficam.has(i.codigo));
