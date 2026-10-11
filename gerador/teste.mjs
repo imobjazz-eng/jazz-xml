@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ajustar, separar } from "./espelho.mjs";
-import { enriquecerTitulo, enriquecerDescricao, enriquecerAnuncio, enriquecerFeed, enderecosSemCoordenada, chaveEndereco, lerAnuncio, usoDe, linkYoutubeValido, pendencias, planilhaPendencias } from "./enriquecer.mjs";
+import { fichaDoImovel, enriquecerTitulo, enriquecerDescricao, enriquecerAnuncio, enriquecerFeed, enderecosSemCoordenada, chaveEndereco, lerAnuncio, usoDe, linkYoutubeValido, pendencias, planilhaPendencias } from "./enriquecer.mjs";
 import { escolherResultado, geocodificar, precisaConsultar, mesmaVia } from "./geocodificar.mjs";
 import { extrairAntigo } from "./antigo.mjs";
 import { ajustarPadrao } from "./enriquecer.mjs";
@@ -116,8 +116,9 @@ ok("sem linhas em branco em excesso", !/\n{3,}/.test(d.texto));
 d = enriquecerDescricao("CASA COM PISCINA E CHURRASQUEIRA NO CENTRO DE SÃO JOSÉ DOS CAMPOS. ACEITA FINANCIAMENTO PELO FGTS.", anuncio, { curta: 0, restaurarNomes: (t) => t.replace(/são josé dos campos/gi, "São José dos Campos") });
 ok("linha em maiúsculas vira frase, preservando sigla e nome", d.texto === "Casa com piscina e churrasqueira no centro de São José dos Campos. Aceita financiamento pelo FGTS.", d.texto);
 d = enriquecerDescricao("Frase completa. ".repeat(250), anuncio);
-ok("descrição longa cortada em frase inteira (até 3000)", d.texto.length <= 3000 && d.texto.endsWith("completa."), d.texto.length);
-ok("descrição longa não ganha ficha", !d.ficha);
+ok("descrição longa cortada em frase inteira (até 3000) e a ficha no fim, inteira", d.texto.length <= 3000 && d.ficha && /completa\.\n\nFicha do imóvel:/.test(d.texto) && d.texto.endsWith(fichaDoImovel(anuncio)), d.texto.length);
+d = enriquecerDescricao("Frase completa. ".repeat(250), anuncio, { curta: 900 });
+ok("com limite (curta), descrição longa não ganha ficha", !d.ficha && d.texto.endsWith("completa."));
 
 console.log("enriquecer.mjs — anúncio e coordenadas");
 const comLocal = (lat, lon) => listing("900", 8).replace(

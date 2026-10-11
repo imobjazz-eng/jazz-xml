@@ -25,8 +25,8 @@ import { inserirTour } from "./tour.mjs";
 export const TITULO_MAX = 100;
 export const TITULO_MIN = 10;
 export const DESCRICAO_MAX = 3000;
-/** Abaixo disso a descrição ganha a ficha do imóvel (regra do feed antigo). */
-export const DESCRICAO_CURTA = 900;
+/** Abaixo disso a descrição ganha a ficha do imóvel; desde 11/10/2026, toda descrição ganha. */
+export const DESCRICAO_CURTA = Infinity;
 
 // Estado de São Paulo (regra do feed antigo).
 const SP = { latMin: -25.35, latMax: -19.75, lonMin: -53.35, lonMax: -44 };
@@ -400,10 +400,16 @@ export function enriquecerDescricao(descricao, a, { curta = DESCRICAO_CURTA, max
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
+  // A ficha (especificações, diferenciais, local) entra em toda descrição:
+  // descrição vale 25 dos 100 pontos da nota do Canal Pro e o portal pede
+  // "todas as especificações dos imóveis". Se não couber, o texto do
+  // anúncio é que encurta (em frase inteira), nunca a ficha.
   let ficha = false;
   if (t.length < curta && !t.includes("Ficha do imóvel:")) {
     const extra = fichaDoImovel(a);
     if (extra) {
+      const espaco = max - extra.length - 2;
+      if (t.length > espaco) t = espaco > 0 ? cortarTexto(t, espaco) : "";
       t = t ? `${t}\n\n${extra}` : extra;
       ficha = true;
     }
