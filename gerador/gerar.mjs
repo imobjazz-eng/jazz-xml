@@ -16,6 +16,8 @@
  *   GEO_INTERVALO_MS pausa entre consultas ao Nominatim (padrão 1100)
  *   VIDEOS_URL      lista "código → link do YouTube" publicada pelo
  *                   repositório de vídeos (padrão: imobjazz-eng/jazz-videos)
+ *   VIDEO_PADRAO    vídeo do YouTube que entra em todo anúncio sem vídeo
+ *                   próprio (do Vista ou da lista); "desligado" tira
  *
  * Se qualquer trava disparar, sai com erro e NÃO grava nada: o arquivo
  * anterior continua no ar.
@@ -23,12 +25,15 @@
 import { writeFile, mkdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { gerarFeed } from "./vista.mjs";
-import { enriquecerFeed, enderecosSemCoordenada, planilhaPendencias } from "./enriquecer.mjs";
+import { enriquecerFeed, enderecosSemCoordenada, planilhaPendencias, linkYoutubeValido } from "./enriquecer.mjs";
 import { TOUR_BASE, TOUR_MIN_FOTOS, codigoDoTour, dadosDoTour, linkDoTour } from "./tour.mjs";
 import { geocodificar, consultaCache } from "./geocodificar.mjs";
 
 const destino = process.argv[2] || "saida/vrsync.xml";
 const VIDEOS_URL = "https://raw.githubusercontent.com/imobjazz-eng/jazz-videos/main/videos.json";
+// Vídeo institucional da Jazz: todo anúncio, atual ou novo, sai com vídeo.
+// Vídeo do próprio imóvel (Vista ou jazz-videos) tem preferência.
+const VIDEO_PADRAO = "https://www.youtube.com/watch?v=DlYDTuoHf3k";
 
 /**
  * Links de vídeo por código. Vêm de outro repositório (jazz-videos), que
@@ -97,7 +102,14 @@ try {
       tours.set(c, d);
       return linkDoTour(c, baseTour);
     };
-    e = enriquecerFeed(r.xml, { coordenadaDe: consultaCache(cache), videoDe: (c) => videos.get(c) ?? null, tourDe });
+    const padrao = process.env.VIDEO_PADRAO || VIDEO_PADRAO;
+    const videoPadrao = padrao === "desligado" ? null : padrao;
+    if (videoPadrao) console.log(`Vídeo padrão para anúncio sem vídeo: ${videoPadrao}`);
+    const videoDe = (c) => {
+      const v = videos.get(c);
+      return v && linkYoutubeValido(v) ? v : videoPadrao;
+    };
+    e = enriquecerFeed(r.xml, { coordenadaDe: consultaCache(cache), videoDe, tourDe });
     console.log("Enriquecimento (anúncios alterados):", e.resumo);
   } catch (err) {
     console.log(`::warning::Enriquecimento falhou, publicando sem ele: ${err.message}`);

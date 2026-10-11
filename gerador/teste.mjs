@@ -261,8 +261,14 @@ ok("planilha de pendências gravada ao lado", existsSync(join(dir, "a", "pendenc
   ok("tour: todo link do XML aponta para dados gravados", links.length > 0 && semArquivo.length === 0, `${links.length} links, ${semArquivo.length} sem arquivo`);
   const s5 = join(dir, "e", "vrsync.xml");
   rodar({ XML_FALSO: arquivo(feed(muitos)), CODIGOS_FALSOS: JSON.stringify(codigos), TOUR_BASE: "desligado" }, s5);
+  const yt = "https://www.youtube.com/watch?v=DlYDTuoHf3k";
+  ok("vídeo padrão em todo anúncio", (x.match(/<Item medium="video">/g) || []).length === 120 && x.includes(`<Item medium="video">${yt}</Item>`));
   ok("TOUR_BASE=desligado: sem tour", existsSync(s5) && !readFileSync(s5, "utf8").includes("<VirtualTourLink>") && !existsSync(join(dir, "e", "tour")));
 }
+
+const s6 = join(dir, "f", "vrsync.xml");
+rodar({ XML_FALSO: arquivo(feed(muitos)), CODIGOS_FALSOS: JSON.stringify(codigos), VIDEO_PADRAO: "desligado" }, s6);
+ok("VIDEO_PADRAO=desligado: sem vídeo", existsSync(s6) && !readFileSync(s6, "utf8").includes('medium="video"'));
 
 const s2 = join(dir, "b", "vrsync.xml");
 ok("XML do Vista truncado: erro e nada gravado",
