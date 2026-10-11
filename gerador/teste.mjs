@@ -12,6 +12,8 @@ import { fileURLToPath } from "node:url";
 import { ajustar, separar } from "./espelho.mjs";
 import { enriquecerTitulo, enriquecerDescricao, enriquecerAnuncio, enriquecerFeed, enderecosSemCoordenada, chaveEndereco, lerAnuncio, usoDe, linkYoutubeValido, pendencias, planilhaPendencias } from "./enriquecer.mjs";
 import { escolherResultado, geocodificar, precisaConsultar, mesmaVia } from "./geocodificar.mjs";
+import { extrairAntigo } from "./antigo.mjs";
+import { ajustarPadrao } from "./enriquecer.mjs";
 import { TOUR_BASE, codigoDoTour, fotosDoAnuncio, dadosDoTour, inserirTour, linkDoTour } from "./tour.mjs";
 
 const aqui = dirname(fileURLToPath(import.meta.url));
@@ -181,6 +183,60 @@ console.log("tour.mjs — tour virtual com as fotos do anúncio");
   ok("quem já tem tour nem pede dados", !r2.mudou.tour && pedidos.length === 0);
   const vf = enriquecerFeed(feed([["900", 8], ["901", 3]]), { tourDe: (c, b) => (dadosDoTour(b) ? linkDoTour(c) : null) });
   ok("feed: tour só em quem tem fotos suficientes", vf.resumo.tour === 1 && vf.xml.includes("?c=900") && !vf.xml.includes("?c=901"));
+}
+
+console.log("antigo.mjs e padrão VRSync (documentação do Grupo ZAP)");
+{
+  const antigoXml = `<Listings><Listing><ListingID>900</ListingID><Location displayAddress="All"><Address>Rua A</Address><StreetNumber>230</StreetNumber><Latitude>-22.9</Latitude><Longitude>-47.0</Longitude></Location>
+    <Details><LivingArea unit="square metres">417.6</LivingArea><YearBuilt>2001</YearBuilt><YearlyTax currency="BRL">201</YearlyTax><Features><Feature>Pool</Feature><Feature>Maids Quarters</Feature></Features></Details></Listing>
+    <Listing><ListingID>901</ListingID><Location><StreetNumber>0</StreetNumber></Location><Details><YearBuilt>abc</YearBuilt><YearlyTax>0.01</YearlyTax></Details></Listing></Listings>`;
+  const ant = extrairAntigo(antigoXml);
+  ok("extrai número, ano, IPTU, área, coordenada e características", ant["900"].numero === "230" && ant["900"].ano === 2001 && ant["900"].iptu === 201 && ant["900"].area_util === 418 && ant["900"].lat === -22.9 && ant["900"].caracteristicas.length === 2, JSON.stringify(ant["900"]));
+  ok("lixo do XML anterior não entra", !ant["901"], JSON.stringify(ant["901"]));
+
+  const base = `<Listing>
+      <ListingID>800</ListingID>
+      <Details>
+        <LivingArea>0</LivingArea>
+        <LotArea>120.6</LotArea>
+        <PropertyAdministrationFee>0.01</PropertyAdministrationFee>
+        <PropertyType>Residential / Apartment</PropertyType>
+        <YearlyTax>0.1</YearlyTax>
+        <Features>
+          <Feature>BarbecueBalcony</Feature>
+          <Feature>Maids Quarters</Feature>
+        </Features>
+        <ListPrice currency="BRL">500000.40</ListPrice>
+      </Details>
+      <Location displayAddress="Neighborhood">
+        <Address>Rua A</Address>
+        <City><![CDATA[Atibaia]]></City>
+      </Location>
+    </Listing>`;
+  const r = ajustarPadrao(base, ant["900"]);
+  const x = r.bloco;
+  ok("Country entra no início de Location", x.includes('<Location displayAddress="Neighborhood">\n        <Country abbreviation="BR">Brasil</Country>\n        <Address>'), x);
+  ok("número do XML anterior logo depois do Address", x.includes("<Address>Rua A</Address>\n        <StreetNumber>230</StreetNumber>"));
+  ok("área útil do XML anterior, inteira e com unit", x.includes('<LivingArea unit="square metres">418</LivingArea>') && x.includes('<LotArea unit="square metres">121</LotArea>'));
+  ok("condomínio 0.01 sai (0 seria isento)", !x.includes("PropertyAdministrationFee"));
+  ok("preço inteiro com currency", x.includes('<ListPrice currency="BRL">500000</ListPrice>'));
+  ok("IPTU do XML anterior no YearlyTax e no Iptu novo", x.includes('<YearlyTax currency="BRL">201</YearlyTax>\n        <Iptu currency="BRL" period="Yearly">201</Iptu>'), x);
+  ok("ano do XML anterior", x.includes("<YearBuilt>2001</YearBuilt>"));
+  ok("características com o nome da lista oficial", x.includes("<Feature>Barbecue Balcony</Feature>") && x.includes("<Feature>Maid's Quarters</Feature>") && !x.includes("BarbecueBalcony"));
+  ok("contadores", r.mudou.pais && r.mudou.numero && r.mudou.ano && r.mudou.iptu && r.mudou.area_util && r.mudou.formato);
+
+  const semAntigo = ajustarPadrao(base.replace("<YearlyTax>0.1</YearlyTax>", "<YearlyTax>395.7</YearlyTax>")).bloco;
+  ok("sem XML anterior: ano 2001; IPTU real do Vista fica", semAntigo.includes("<YearBuilt>2001</YearBuilt>") && semAntigo.includes('<YearlyTax currency="BRL">396</YearlyTax>') && semAntigo.includes('<Iptu currency="BRL" period="Yearly">396</Iptu>'), semAntigo);
+  ok("sem IPTU nenhum: 201", ajustarPadrao(base.replace(/\s*<YearlyTax>0.1<\/YearlyTax>/, "")).bloco.includes('<YearlyTax currency="BRL">201</YearlyTax>'));
+  ok("sem número no anterior: nada inventado", !ajustarPadrao(base).bloco.includes("StreetNumber"));
+  const terreno = ajustarPadrao(base.replace("Residential / Apartment", "Residential / Land Lot")).bloco;
+  ok("terreno: sem ano de construção", !terreno.includes("YearBuilt"));
+  const duas = ajustarPadrao(x, ant["900"]).bloco;
+  ok("rodar duas vezes não duplica nada", duas === x, duas);
+  const feat = ajustarPadrao(base.replace(/<Features>[\s\S]*?<\/Features>/, "<Warranties/>"), ant["900"]).bloco;
+  ok("sem características no Vista: as do anterior", feat.includes("<Feature>Pool</Feature>") && feat.includes("<Feature>Maid's Quarters</Feature>"), feat);
+  const vf = enriquecerFeed(feed([["900", 8]]), { antigoDe: (c) => ant[c] ?? null });
+  ok("feed: resumo conta o que veio do anterior", vf.resumo.iptu === 1 && vf.resumo.ano === 1 && vf.resumo.pais === 1, JSON.stringify(vf.resumo));
 }
 
 console.log("geocodificar.mjs");
