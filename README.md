@@ -22,7 +22,7 @@ Projeto separado do Jazz Conecta (a plataforma), que fica em
    - **descrição**: `&amp;` corrigido, frase com telefone/e-mail/site removida (proibido no portal), linha em caixa alta vira frase normal (preservando siglas, cidades e bairros), até 3000 caracteres cortando em frase inteira; descrição com menos de 900 caracteres ganha a ficha do imóvel (áreas, quartos, banheiros, vagas, ano, diferenciais, local);
    - **coordenadas**: o pino padrão do Vista no centro do Brasil é descartado; anúncio sem coordenada recebe a da rua, geocodificada no OpenStreetMap (`gerador/geocodificar.mjs`) com as conferências do feed antigo: mesma cidade, mesma rua, dentro do estado. Até `GEO_LIMITE` endereços novos por hora, 1 consulta por segundo, com cache em `geocode.json`.
    - **UsageType** (Residencial/Comercial), campo do VRSync que o Vista não exporta, tirado do próprio tipo do imóvel;
-   - **vídeo**: anúncio sem vídeo recebe o link do YouTube da lista publicada pelo repositório `imobjazz-eng/jazz-videos` (`VIDEOS_URL`). Só link do YouTube, um por anúncio, como o portal exige. A geração dos vídeos e o YouTube ficam todos lá; aqui só se lê a lista.
+   - **vídeo**: anúncio sem vídeo recebe o link do YouTube da lista publicada pelo repositório `imobjazz-eng/jazz-videos` (`VIDEOS_URL`). Só link do YouTube, um por anúncio, como o portal exige. A geração dos vídeos e o YouTube ficam todos lá; aqui só se lê a lista. Quem continua sem vídeo (fora da lista e sem vídeo no Vista) recebe o vídeo institucional da Jazz (https://www.youtube.com/watch?v=DlYDTuoHf3k), então todo anúncio, atual ou novo, sai com vídeo (`VIDEO_PADRAO` troca o link; `desligado` tira).
 5. O XML é validado (parser do Python) e publicado no branch `gh-pages` (GitHub Pages), junto com o cache de geocodificação.
 
 ## Pendências para a nota máxima
@@ -57,6 +57,7 @@ no portal; feed vazio ou truncado derruba.
 | Variables | `FEED_MAXIMO` | não (padrão 3000) |
 | Variables | `VISTA_XML_URL` | não (padrão: XML de portais do Vista) |
 | Variables | `VIDEOS_URL` | não (padrão: lista do jazz-videos) |
+| Variables | `VIDEO_PADRAO` | não (padrão: vídeo institucional; `desligado` tira) |
 | Variables | `GEO_LIMITE` | não (padrão 200 endereços novos por execução) |
 
 ## Rodar local

@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import { ajustar, separar } from "./espelho.mjs";
 import { enriquecerTitulo, enriquecerDescricao, enriquecerAnuncio, enriquecerFeed, enderecosSemCoordenada, chaveEndereco, lerAnuncio, usoDe, linkYoutubeValido, pendencias, planilhaPendencias } from "./enriquecer.mjs";
 import { escolherResultado, geocodificar, precisaConsultar, mesmaVia } from "./geocodificar.mjs";
+import { TOUR_BASE, codigoDoTour, fotosDoAnuncio, dadosDoTour, inserirTour, linkDoTour } from "./tour.mjs";
 
 const aqui = dirname(fileURLToPath(import.meta.url));
 let falhas = 0, total = 0;
@@ -157,6 +158,31 @@ ok("pendências apontam o que só o Vista resolve", ["ano de construção", "ár
 const planilha = planilhaPendencias(feed([["100", 8]]));
 ok("planilha de pendências abre no Excel (BOM, ';')", planilha.startsWith("\uFEFFcodigo;titulo;pendencias;quantidade") && planilha.includes('"100";'));
 
+console.log("tour.mjs — tour virtual com as fotos do anúncio");
+{
+  const com = listing("800", 8).replace('caption="">https://cdn.vistahost.com.br/f/800_3.jpg', 'caption="Sala &amp; cozinha" primary="true">https://cdn.vistahost.com.br/f/800_3.jpg');
+  const f = fotosDoAnuncio(com);
+  ok("fotos na ordem, principal primeiro, legenda desescapada", f.length === 8 && f[0].u.endsWith("800_3.jpg") && f[0].l === "Sala & cozinha" && f[1].u.endsWith("800_0.jpg"), JSON.stringify(f.slice(0, 2)));
+  ok("foto repetida entra uma vez só", fotosDoAnuncio(listing("801", 3) + listing("801", 3)).length === 3);
+  ok("menos fotos que o mínimo: sem tour", dadosDoTour(listing("802", 6)) === null && dadosDoTour(listing("803", 7)).fotos.length === 7);
+  ok("código vira arquivo só se for seguro", codigoDoTour("12345") === "12345" && codigoDoTour("../x") === null && codigoDoTour("") === null);
+  const link = linkDoTour("12345");
+  ok("link completo em HTTPS, sem encurtador", link === TOUR_BASE + "?c=12345" && link.startsWith("https://imobjazz-eng.github.io/"));
+  const comTitulo = listing("804", 8).replace("<Media>", "<Title><![CDATA[Casa]]></Title>\n      <Media>");
+  const t1 = inserirTour(comTitulo, link);
+  ok("VirtualTourLink entra logo depois do Title", /<\/Title>\n {6}<VirtualTourLink><!\[CDATA\[https:\/\/imobjazz-eng\.github\.io\/jazz-xml\/tour\/\?c=12345\]\]><\/VirtualTourLink>\n {6}<Media>/.test(t1), t1);
+  ok("sem Title: entra antes de Media", inserirTour(listing("805", 8), link).includes("<VirtualTourLink><![CDATA[" + link + "]]></VirtualTourLink>\n      <Media>"));
+  ok("tour do Vista fica (não duplica)", (inserirTour(t1, "https://outro/").match(/<VirtualTourLink>/g) || []).length === 1);
+  let pedidos = [];
+  const r = enriquecerAnuncio(comTitulo, { tourDe: (c, b) => { pedidos.push(c); return linkDoTour(c); } });
+  ok("enriquecer pede o tour e marca", r.mudou.tour && pedidos[0] === "804" && r.bloco.includes("?c=804"));
+  pedidos = [];
+  const r2 = enriquecerAnuncio(t1, { tourDe: (c) => { pedidos.push(c); return linkDoTour(c); } });
+  ok("quem já tem tour nem pede dados", !r2.mudou.tour && pedidos.length === 0);
+  const vf = enriquecerFeed(feed([["900", 8], ["901", 3]]), { tourDe: (c, b) => (dadosDoTour(b) ? linkDoTour(c) : null) });
+  ok("feed: tour só em quem tem fotos suficientes", vf.resumo.tour === 1 && vf.xml.includes("?c=900") && !vf.xml.includes("?c=901"));
+}
+
 console.log("geocodificar.mjs");
 const pedido = { chave: "x", rua: "Rua Dr. Barão de Jaguara", cidade: "Campinas", uf: "SP", estado: "São Paulo" };
 const res = (road, city, lat = "-22.9", lon = "-47.06") => ({ lat, lon, address: { road, city } });
@@ -228,6 +254,21 @@ ok("gravou os 120", existsSync(s1) && ids(readFileSync(s1, "utf8")).length === 1
 ok("gravou o cache de geocodificação ao lado", existsSync(join(dir, "a", "geocode.json")));
 ok("título enriquecido no arquivo final", readFileSync(s1, "utf8").includes("<Title><![CDATA["));
 ok("planilha de pendências gravada ao lado", existsSync(join(dir, "a", "pendencias.csv")));
+{
+  const x = readFileSync(s1, "utf8");
+  const links = [...x.matchAll(/<VirtualTourLink><!\[CDATA\[([^\]]+)\]\]>/g)].map((m) => m[1]);
+  const semArquivo = links.filter((l) => !existsSync(join(dir, "a", "tour", "d", `${new URL(l).searchParams.get("c")}.json`)));
+  ok("tour: todo link do XML aponta para dados gravados", links.length > 0 && semArquivo.length === 0, `${links.length} links, ${semArquivo.length} sem arquivo`);
+  const s5 = join(dir, "e", "vrsync.xml");
+  rodar({ XML_FALSO: arquivo(feed(muitos)), CODIGOS_FALSOS: JSON.stringify(codigos), TOUR_BASE: "desligado" }, s5);
+  const yt = "https://www.youtube.com/watch?v=DlYDTuoHf3k";
+  ok("vídeo padrão em todo anúncio", (x.match(/<Item medium="video">/g) || []).length === 120 && x.includes(`<Item medium="video">${yt}</Item>`));
+  ok("TOUR_BASE=desligado: sem tour", existsSync(s5) && !readFileSync(s5, "utf8").includes("<VirtualTourLink>") && !existsSync(join(dir, "e", "tour")));
+}
+
+const s6 = join(dir, "f", "vrsync.xml");
+rodar({ XML_FALSO: arquivo(feed(muitos)), CODIGOS_FALSOS: JSON.stringify(codigos), VIDEO_PADRAO: "desligado" }, s6);
+ok("VIDEO_PADRAO=desligado: sem vídeo", existsSync(s6) && !readFileSync(s6, "utf8").includes('medium="video"'));
 
 const s2 = join(dir, "b", "vrsync.xml");
 ok("XML do Vista truncado: erro e nada gravado",

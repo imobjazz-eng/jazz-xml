@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Tour virtual</title>
+<style>
+  /* Página só com o tour (regra do Grupo ZAP para o VirtualTourLink):
+     fotos do anúncio em percurso contínuo, sem contato nem links. */
+  :root { color-scheme: dark; --fundo: #000; --texto: #fff; --suave: rgba(255,255,255,.72); --vidro: rgba(0,0,0,.45); }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--fundo); color: var(--texto); overflow: hidden;
+    font: 14px/1.3 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-user-select: none; user-select: none; }
+  #palco { position: fixed; inset: 0; overflow: hidden; touch-action: pan-y; cursor: grab; }
+  #palco.arrastando { cursor: grabbing; }
+  .cena { position: absolute; inset: 0; opacity: 0; transition: opacity 1.1s ease; will-change: opacity; }
+  .cena.ativa { opacity: 1; }
+  .cena img { position: absolute; left: 50%; top: 50%; width: 100%; height: 100%; object-fit: cover;
+    transform: translate(-50%, -50%) scale(1.12); transform-origin: center; will-change: transform; }
+  /* Fundo desfocado: foto vertical não deixa barra preta. */
+  .cena .fundo { filter: blur(28px) brightness(.55); transform: translate(-50%, -50%) scale(1.25); }
+  .cena .foto { object-fit: contain; }
+  .cena .foto.cobre { object-fit: cover; }
+  #barra { position: fixed; left: 0; right: 0; bottom: 0; padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+    display: flex; align-items: center; gap: 8px; background: linear-gradient(transparent, rgba(0,0,0,.7));
+    transition: opacity .4s ease; }
+  body.quieto #barra, body.quieto #topo { opacity: 0; }
+  button { appearance: none; border: 0; background: var(--vidro); color: var(--texto); width: 40px; height: 40px;
+    border-radius: 50%; display: grid; place-items: center; cursor: pointer; flex: none; }
+  button:hover { background: rgba(255,255,255,.18); }
+  button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+  button svg { width: 20px; height: 20px; fill: currentColor; }
+  #progresso { flex: 1; height: 4px; background: rgba(255,255,255,.25); border-radius: 2px; overflow: hidden; }
+  #progresso i { display: block; height: 100%; width: 0; background: #fff; }
+  #contador { color: var(--suave); min-width: 52px; text-align: right; font-variant-numeric: tabular-nums; }
+  #topo { position: fixed; top: 0; left: 0; right: 0; padding: calc(10px + env(safe-area-inset-top)) 14px 24px;
+    background: linear-gradient(rgba(0,0,0,.55), transparent); color: var(--suave); font-size: 13px; transition: opacity .4s ease;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+  #miniaturas { position: fixed; left: 0; right: 0; bottom: 64px; display: none; gap: 6px; padding: 6px 12px;
+    overflow-x: auto; scrollbar-width: none; }
+  #miniaturas.aberto { display: flex; }
+  #miniaturas img { width: 72px; height: 50px; object-fit: cover; border-radius: 4px; opacity: .6; cursor: pointer; flex: none; border: 2px solid transparent; }
+  #miniaturas img.atual { opacity: 1; border-color: #fff; }
+  .lado { position: fixed; top: 50%; transform: translateY(-50%); width: 48px; height: 48px; }
+  #anterior { left: 10px; } #proxima { right: 10px; }
+  body.quieto .lado { opacity: 0; }
+  #aviso { position: fixed; inset: 0; display: none; place-items: center; text-align: center; padding: 24px; color: var(--suave); }
+  body.vazio #aviso { display: grid; }
+  body.vazio #barra, body.vazio .lado, body.vazio #topo { display: none; }
+  @media (prefers-reduced-motion: reduce) { .cena { transition: none; } }
+</style>
+</head>
+<body>
+<div id="palco" aria-label="Tour virtual do imóvel" role="img"></div>
+<div id="topo" aria-live="polite"></div>
+<button class="lado" id="anterior" aria-label="Foto anterior"><svg viewBox="0 0 24 24"><path d="M15.4 7.4 14 6l-6 6 6 6 1.4-1.4L10.8 12z"/></svg></button>
+<button class="lado" id="proxima" aria-label="Próxima foto"><svg viewBox="0 0 24 24"><path d="M8.6 16.6 10 18l6-6-6-6-1.4 1.4 4.6 4.6z"/></svg></button>
+<div id="miniaturas" aria-label="Fotos"></div>
+<div id="barra">
+  <button id="tocar" aria-label="Pausar"><svg viewBox="0 0 24 24"><path id="icone-tocar" d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg></button>
+  <div id="progresso"><i></i></div>
+  <span id="contador"></span>
+  <button id="grade" aria-label="Ver todas as fotos"><svg viewBox="0 0 24 24"><path d="M4 4h7v7H4zm9 0h7v7h-7zM4 13h7v7H4zm9 0h7v7h-7z"/></svg></button>
+  <button id="tela" aria-label="Tela cheia"><svg viewBox="0 0 24 24"><path d="M5 5h5v2H7v3H5zm9 0h5v5h-2V7h-3zM5 14h2v3h3v2H5zm12 3v-3h2v5h-5v-2z"/></svg></button>
+</div>
+<div id="aviso">Tour indisponível no momento.</div>
+<script>
+(function () {
+  "use strict";
+  var DURACAO = 6500; // ms por foto
+  var palco = document.getElementById("palco");
+  var topo = document.getElementById("topo");
+  var contador = document.getElementById("contador");
+  var barraProg = document.querySelector("#progresso i");
+  var miniaturas = document.getElementById("miniaturas");
+  var botaoTocar = document.getElementById("tocar");
+  var iconeTocar = document.getElementById("icone-tocar");
+  var fotos = [], atual = -1, tocando = true, inicio = 0, decorrido = 0, quadro = 0;
+  var cenas = [], cenaAtiva = 0, movimento = null;
+  var reduzir = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function vazio() { document.body.classList.add("vazio"); }
+
+  var codigo = new URLSearchParams(location.search).get("c") || "";
+  if (!/^[A-Za-z0-9_-]{1,40}$/.test(codigo)) { vazio(); return; }
+
+  fetch("d/" + encodeURIComponent(codigo) + ".json", { cache: "no-cache" })
+    .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(function (d) {
+      fotos = (d && d.fotos || []).filter(function (f) { return f && /^https:\/\//.test(f.u); });
+      if (!fotos.length) throw new Error("sem fotos");
+      montar();
+    })
+    .catch(vazio);
+
+  function montar() {
+    for (var i = 0; i < 2; i++) {
+      var c = document.createElement("div");
+      c.className = "cena";
+      c.innerHTML = '<img class="fundo" alt="" aria-hidden="true"><img class="foto" alt="">';
+      palco.appendChild(c);
+      cenas.push(c);
+    }
+    fotos.forEach(function (f, i) {
+      var m = document.createElement("img");
+      m.loading = "lazy"; m.alt = "Foto " + (i + 1); m.src = f.u;
+      m.addEventListener("click", function () { ir(i, true); });
+      miniaturas.appendChild(m);
+    });
+    ir(0);
+    requestAnimationFrame(passo);
+  }
+
+  // Percurso de câmera de cada foto: aproxima ou afasta e desliza para um
+  // lado, como quem caminha pelo cômodo (efeito Ken Burns).
+  function sortearMovimento(i) {
+    var lados = [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, 1]];
+    var l = lados[i % lados.length];
+    var entrando = i % 2 === 0;
+    return { s0: entrando ? 1.04 : 1.16, s1: entrando ? 1.16 : 1.04, x: l[0] * 3.2, y: l[1] * 2.2, arrasteX: 0, arrasteY: 0 };
+  }
+
+  function aplicar(cena, mov, t) {
+    var img = cena.querySelector(".foto");
+    var e = reduzir ? 0 : t;
+    var s = mov.s0 + (mov.s1 - mov.s0) * e;
+    var x = mov.x * (e - 0.5) + mov.arrasteX;
+    var y = mov.y * (e - 0.5) + mov.arrasteY;
+    img.style.transform = "translate(calc(-50% + " + x + "%), calc(-50% + " + y + "%)) scale(" + s + ")";
+  }
+
+  function ir(i, manual) {
+    if (!fotos.length) return;
+    atual = (i + fotos.length) % fotos.length;
+    cenaAtiva = 1 - cenaAtiva;
+    var cena = cenas[cenaAtiva], velha = cenas[1 - cenaAtiva];
+    var f = fotos[atual];
+    var foto = cena.querySelector(".foto"), fundo = cena.querySelector(".fundo");
+    foto.onload = function () {
+      // Foto deitada enche a tela; em pé fica inteira com fundo desfocado.
+      var deitada = foto.naturalWidth >= foto.naturalHeight * 1.15;
+      var telaDeitada = innerWidth >= innerHeight;
+      foto.classList.toggle("cobre", deitada === telaDeitada);
+    };
+    foto.src = f.u; fundo.src = f.u;
+    foto.alt = f.l || "Foto " + (atual + 1) + " do imóvel";
+    movimento = sortearMovimento(atual);
+    aplicar(cena, movimento, 0);
+    cena.classList.add("ativa"); velha.classList.remove("ativa");
+    contador.textContent = (atual + 1) + " / " + fotos.length;
+    topo.textContent = f.l || "";
+    [].forEach.call(miniaturas.children, function (m, k) { m.classList.toggle("atual", k === atual); });
+    var mini = miniaturas.children[atual];
+    if (mini && miniaturas.classList.contains("aberto")) mini.scrollIntoView({ inline: "center", block: "nearest" });
+    decorrido = 0; inicio = performance.now();
+    // Pré-carrega a próxima para a troca não piscar.
+    var prox = new Image(); prox.src = fotos[(atual + 1) % fotos.length].u;
+    if (manual) acordar();
+  }
+
+  function passo(agora) {
+    if (tocando) decorrido = agora - inicio;
+    var t = Math.min(decorrido / DURACAO, 1);
+    if (movimento) aplicar(cenas[cenaAtiva], movimento, t);
+    barraProg.style.width = ((atual + t) / fotos.length * 100) + "%";
+    if (tocando && t >= 1) ir(atual + 1);
+    quadro = requestAnimationFrame(passo);
+  }
+
+  function alternar(forcar) {
+    tocando = typeof forcar === "boolean" ? forcar : !tocando;
+    if (tocando) inicio = performance.now() - decorrido;
+    iconeTocar.setAttribute("d", tocando ? "M6 5h4v14H6zm8 0h4v14h-4z" : "M8 5v14l11-7z");
+    botaoTocar.setAttribute("aria-label", tocando ? "Pausar" : "Tocar");
+  }
+
+  // Controles somem quando ninguém mexe; voltam a qualquer toque.
+  var sono = 0;
+  function acordar() {
+    document.body.classList.remove("quieto");
+    clearTimeout(sono);
+    sono = setTimeout(function () { if (tocando) document.body.classList.add("quieto"); }, 3000);
+  }
+  ["mousemove", "touchstart", "keydown"].forEach(function (ev) { addEventListener(ev, acordar, { passive: true }); });
+
+  document.getElementById("anterior").onclick = function () { ir(atual - 1, true); };
+  document.getElementById("proxima").onclick = function () { ir(atual + 1, true); };
+  botaoTocar.onclick = function () { alternar(); acordar(); };
+  document.getElementById("grade").onclick = function () {
+    miniaturas.classList.toggle("aberto");
+    var mini = miniaturas.children[atual];
+    if (mini) mini.scrollIntoView({ inline: "center", block: "nearest" });
+  };
+  document.getElementById("tela").onclick = function () {
+    var el = document.documentElement;
+    if (document.fullscreenElement) document.exitFullscreen();
+    else if (el.requestFullscreen) el.requestFullscreen().catch(function () {});
+  };
+  addEventListener("keydown", function (e) {
+    if (e.key === "ArrowRight") ir(atual + 1, true);
+    else if (e.key === "ArrowLeft") ir(atual - 1, true);
+    else if (e.key === " ") { e.preventDefault(); alternar(); }
+  });
+
+  // Arrastar: olhar pela foto (pausa o percurso); deslizar rápido troca de foto.
+  var toque = null;
+  palco.addEventListener("pointerdown", function (e) {
+    toque = { x: e.clientX, y: e.clientY, t: performance.now(), ax: movimento ? movimento.arrasteX : 0, ay: movimento ? movimento.arrasteY : 0, tocava: tocando };
+    palco.setPointerCapture(e.pointerId);
+    palco.classList.add("arrastando");
+  });
+  palco.addEventListener("pointermove", function (e) {
+    if (!toque || !movimento) return;
+    var dx = (e.clientX - toque.x) / innerWidth * 100, dy = (e.clientY - toque.y) / innerHeight * 100;
+    if (Math.abs(dx) + Math.abs(dy) > 2 && tocando) alternar(false);
+    movimento.arrasteX = Math.max(-8, Math.min(8, toque.ax + dx * 0.5));
+    movimento.arrasteY = Math.max(-6, Math.min(6, toque.ay + dy * 0.5));
+  });
+  palco.addEventListener("pointerup", function (e) {
+    if (!toque) return;
+    var dx = e.clientX - toque.x, dt = performance.now() - toque.t;
+    palco.classList.remove("arrastando");
+    if (Math.abs(dx) > 60 && dt < 350) { ir(atual + (dx < 0 ? 1 : -1), true); if (toque.tocava) alternar(true); }
+    else if (Math.abs(dx) < 6 && Math.abs(e.clientY - toque.y) < 6) { alternar(); }
+    toque = null;
+    acordar();
+  });
+  document.addEventListener("visibilitychange", function () { if (document.hidden) alternar(false); });
+  acordar();
+})();
+</script>
+</body>
+</html>

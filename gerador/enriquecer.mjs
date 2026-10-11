@@ -20,6 +20,7 @@
  * NADA É INVENTADO: só reorganiza o que o anúncio já informa. Sem rede aqui.
  */
 import { separar } from "./espelho.mjs";
+import { inserirTour } from "./tour.mjs";
 
 export const TITULO_MAX = 100;
 export const TITULO_MIN = 10;
@@ -540,9 +541,9 @@ function trocarCdata(bloco, tag, texto) {
  * Enriquece um anúncio. `coordenadaDe(chave)` devolve {lat, lon} do cache de
  * geocodificação, ou null.
  */
-export function enriquecerAnuncio(bloco, { coordenadaDe = () => null, videoDe = () => null, restaurarNomes } = {}) {
+export function enriquecerAnuncio(bloco, { coordenadaDe = () => null, videoDe = () => null, tourDe = () => null, restaurarNomes } = {}) {
   const a = lerAnuncio(bloco);
-  const mudou = { titulo: false, descricao: false, ficha: false, coordenada_adicionada: false, coordenada_descartada: false, uso: false, video: false };
+  const mudou = { titulo: false, descricao: false, ficha: false, coordenada_adicionada: false, coordenada_descartada: false, uso: false, video: false, tour: false };
   let b = bloco;
 
   const titulo = enriquecerTitulo(a.titulo, a);
@@ -585,13 +586,22 @@ export function enriquecerAnuncio(bloco, { coordenadaDe = () => null, videoDe = 
     const novo = inserirVideo(b, video);
     if (novo !== b) { b = novo; mudou.video = true; }
   }
+
+  // Tour virtual com as fotos do anúncio, só para quem não tem um do Vista.
+  if (a.codigo && !/<VirtualTourLink>/.test(b)) {
+    const tour = tourDe(a.codigo, b);
+    if (tour) {
+      const novo = inserirTour(b, tour);
+      if (novo !== b) { b = novo; mudou.tour = true; }
+    }
+  }
   return { bloco: b, mudou };
 }
 
 /** Enriquece o feed inteiro. Cabeçalho, rodapé e ordem ficam como estão. */
 export function enriquecerFeed(xml, opcoes = {}) {
   const { cabecalho, blocos, rodape } = separar(xml);
-  const resumo = { titulo: 0, descricao: 0, ficha: 0, coordenada_adicionada: 0, coordenada_descartada: 0, uso: 0, video: 0, sem_coordenada: 0 };
+  const resumo = { titulo: 0, descricao: 0, ficha: 0, coordenada_adicionada: 0, coordenada_descartada: 0, uso: 0, video: 0, tour: 0, sem_coordenada: 0 };
   const nomes = blocos.flatMap((b) => [valor(b, "City"), valor(b, "Neighborhood")]);
   const restaurarNomes = restauradorDeNomes(nomes);
   const corpo = blocos.map((bloco) => {
