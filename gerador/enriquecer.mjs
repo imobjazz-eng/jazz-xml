@@ -525,11 +525,10 @@ export function ajustarPadrao(bloco, antigo = {}, { anoPadrao = 2001, iptuPadrao
     mudou.pais = true;
   }
 
-  // Endereço só com bairro passa a mostrar a rua, sem o número (opção
-  // "Street" da documentação): o número vai no XML, mas o portal não exibe.
-  // Decisão do Pablo (11/10/2026): endereço visível sem expor o número real.
+  // Endereço só com bairro passa a completo (rua e número reais): endereço
+  // vale 35 dos 100 pontos da nota do Canal Pro. Decisão do Pablo (11/10/2026).
   if (/<Location displayAddress="Neighborhood"/.test(b) && valor(b, "Address")) {
-    b = b.replace('<Location displayAddress="Neighborhood"', '<Location displayAddress="Street"');
+    b = b.replace('<Location displayAddress="Neighborhood"', '<Location displayAddress="All"');
     mudou.rua_visivel = true;
   }
 
