@@ -10,7 +10,9 @@
 # priorizando quem tem mais fotos. Ver gerador/espelho.mjs.
 # Depois, enriquecimento (gerador/enriquecer.mjs): título e descrição limpos
 # para o portal e coordenada para quem não tem, geocodificada no
-# OpenStreetMap com cache (geocode.json, publicado ao lado do XML).
+# OpenStreetMap com cache (geocode.json, publicado ao lado do XML), e tour
+# virtual com as fotos do anúncio (tour/, ver gerador/tour.mjs) para quem
+# não tem tour no Vista.
 #
 # POR QUE AQUI. O XML era montado na Supabase e congelou em 20/09/2026 com a
 # restrição de cota da organização. Aqui não há banco no caminho, e
@@ -108,6 +110,8 @@ jobs:
           # A página de oportunidades (imóveis de proprietário) sai junto, em
           # pasta própria: o gh-pages é sobrescrito inteiro a cada publicação.
           cp -r oportunidades site/oportunidades
+          # Tour virtual: a página; os dados (tour/d/*.json) o gerador já gravou.
+          mkdir -p site/tour && cp tour/index.html site/tour/index.html
           cd site
           touch .nojekyll
           cat > index.html <<HTML
