@@ -84,8 +84,21 @@ jobs:
             echo "Sem cache anterior: começando vazio"
           fi
 
+      # Dados do XML anterior (número, ano, IPTU...): extraídos uma vez do
+      # Worker congelado e guardados no gh-pages (ver gerador/antigo.mjs).
+      - name: Recuperar dados do XML anterior
+        run: |
+          mkdir -p cache
+          if git fetch -q --depth=1 origin gh-pages 2>/dev/null && git show FETCH_HEAD:antigo.json > cache/antigo.json 2>/dev/null; then
+            echo "Dados do XML anterior: $(wc -c < cache/antigo.json) bytes"
+          else
+            rm -f cache/antigo.json
+            echo "Sem cópia no gh-pages: o gerador extrai do Worker"
+          fi
+
       - name: Gerar XML a partir do Vista
         env:
+          ANTIGO_CACHE: cache/antigo.json
           GEOCODE_CACHE: cache/geocode.json
           GEO_LIMITE: ${{ vars.GEO_LIMITE || '200' }}
           VIDEOS_URL: ${{ vars.VIDEOS_URL }}

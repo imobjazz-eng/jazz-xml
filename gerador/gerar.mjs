@@ -16,6 +16,9 @@
  *   GEO_INTERVALO_MS pausa entre consultas ao Nominatim (padrão 1100)
  *   VIDEOS_URL      lista "código → link do YouTube" publicada pelo
  *                   repositório de vídeos (padrão: imobjazz-eng/jazz-videos)
+ *   ANTIGO_CACHE    dados do XML anterior (antigo.json do gh-pages); sem ele,
+ *                   baixa ANTIGO_URL (padrão: Worker congelado) e extrai.
+ *                   O resultado é gravado como antigo.json ao lado do XML
  *   VIDEO_PADRAO    vídeo do YouTube que entra em todo anúncio sem vídeo
  *                   próprio (do Vista ou da lista); "desligado" tira
  *
@@ -28,6 +31,7 @@ import { gerarFeed } from "./vista.mjs";
 import { enriquecerFeed, enderecosSemCoordenada, planilhaPendencias, linkYoutubeValido } from "./enriquecer.mjs";
 import { TOUR_BASE, TOUR_MIN_FOTOS, codigoDoTour, dadosDoTour, linkDoTour } from "./tour.mjs";
 import { geocodificar, consultaCache } from "./geocodificar.mjs";
+import { ANTIGO_URL, extrairAntigo } from "./antigo.mjs";
 
 const destino = process.argv[2] || "saida/vrsync.xml";
 const VIDEOS_URL = "https://raw.githubusercontent.com/imobjazz-eng/jazz-videos/main/videos.json";
@@ -50,6 +54,28 @@ async function carregarVideos(url) {
   } catch (e) {
     console.log(`Lista de vídeos indisponível (${e.message}): feed segue sem vídeos novos.`);
     return new Map();
+  }
+}
+
+/**
+ * Dados do XML anterior: a cópia guardada no gh-pages ou, na primeira vez,
+ * extraídos do Worker congelado. Falha devolve vazio: nunca segura o feed.
+ */
+async function carregarAntigo(arquivo, url) {
+  if (arquivo) {
+    try {
+      const d = JSON.parse(await readFile(arquivo, "utf8"));
+      if (d && typeof d === "object" && Object.keys(d).length) return d;
+    } catch {}
+  }
+  if (url === "desligado") return {};
+  try {
+    const r = await fetch(url, { signal: AbortSignal.timeout(120_000) });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return extrairAntigo(await r.text());
+  } catch (e) {
+    console.log(`XML anterior indisponível (${e.message}): segue só com o Vista.`);
+    return {};
   }
 }
 
@@ -87,6 +113,7 @@ try {
   // Enriquecimento com defeito não derruba o feed: publica o XML sem ele.
   let e;
   const tours = new Map();
+  let antigo = {};
   try {
     const videos = await carregarVideos(process.env.VIDEOS_URL || VIDEOS_URL);
     if (videos.size) console.log(`Lista de vídeos: ${videos.size} links.`);
@@ -109,7 +136,10 @@ try {
       const v = videos.get(c);
       return v && linkYoutubeValido(v) ? v : videoPadrao;
     };
-    e = enriquecerFeed(r.xml, { coordenadaDe: consultaCache(cache), videoDe, tourDe });
+    antigo = await carregarAntigo(process.env.ANTIGO_CACHE, process.env.ANTIGO_URL || ANTIGO_URL);
+    console.log(`XML anterior: ${Object.keys(antigo).length} anúncios com dados.`);
+    const antigoDe = (c) => antigo[c] ?? null;
+    e = enriquecerFeed(r.xml, { coordenadaDe: consultaCache(cache), videoDe, tourDe, antigoDe });
     console.log("Enriquecimento (anúncios alterados):", e.resumo);
   } catch (err) {
     console.log(`::warning::Enriquecimento falhou, publicando sem ele: ${err.message}`);
@@ -120,6 +150,7 @@ try {
   await mkdir(dirname(destino), { recursive: true });
   await writeFile(destino, e.xml);
   await writeFile(join(dirname(destino), "geocode.json"), JSON.stringify(cache));
+  if (Object.keys(antigo).length) await writeFile(join(dirname(destino), "antigo.json"), JSON.stringify(antigo));
   if (tours.size) {
     const pasta = join(dirname(destino), "tour", "d");
     await mkdir(pasta, { recursive: true });

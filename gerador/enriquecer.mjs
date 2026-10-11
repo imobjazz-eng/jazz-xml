@@ -490,6 +490,117 @@ function inserirVideo(bloco, url) {
   return bloco.replace(/(\n[ \t]*)<\/Media>/, (m, quebra) => `\n${ind}<Item medium="video">${url}</Item>${quebra}</Media>`);
 }
 
+// ---------------------------------------------------------------- padrão VRSync
+
+// Nomes que o Vista exporta fora da lista oficial de Features do VRSync.
+const CARACTERISTICA_OFICIAL = { "Maids Quarters": "Maid's Quarters", BarbecueBalcony: "Barbecue Balcony" };
+const TERRENO = /Land Lot/;
+const DINHEIRO = ["ListPrice", "RentalPrice", "PropertyAdministrationFee", "YearlyTax"];
+const AREAS = ["LivingArea", "LotArea"];
+
+const indentacaoFilhos = (bloco, pai) => (bloco.match(new RegExp(`<${pai}[^>]*>\\s*?\\n([ \\t]*)<`)) || [, "        "])[1];
+const elemento = (tag) => new RegExp(`<${tag}(?:\\s[^>]*)?(?:/>|>[\\s\\S]*?</${tag}>)`);
+const linhaDoElemento = (tag) => new RegExp(`\\n[ \\t]*<${tag}(?:\\s[^>]*)?(?:/>|>[\\s\\S]*?</${tag}>)`);
+
+function inserirNoFim(bloco, pai, xml) {
+  const ind = indentacaoFilhos(bloco, pai);
+  return bloco.replace(new RegExp(`(\\n[ \\t]*)</${pai}>`), (m, quebra) => `\n${ind}${xml}${quebra}</${pai}>`);
+}
+
+/**
+ * Deixa o anúncio no formato da documentação do Grupo ZAP (developers.grupozap.com,
+ * VRSync): Country em Location, valores inteiros com currency/unit, Iptu no
+ * elemento novo, Features com os nomes da lista oficial. Completa com o XML
+ * anterior (`antigo`) o que o Vista não traz: número, ano, IPTU, área útil e
+ * características; ano e IPTU sem dado ficam 2001 e 201, como no XML anterior.
+ */
+export function ajustarPadrao(bloco, antigo = {}, { anoPadrao = 2001, iptuPadrao = 201 } = {}) {
+  const mudou = { pais: false, numero: false, ano: false, iptu: false, area_util: false, caracteristicas: false, formato: false };
+  let b = bloco;
+  const tipo = valor(b, "PropertyType") || "";
+
+  if (/<Location[^>]*>/.test(b) && !/<Country/.test(b)) {
+    const ind = indentacaoFilhos(b, "Location");
+    b = b.replace(/(<Location[^>]*>)/, `$1\n${ind}<Country abbreviation="BR">Brasil</Country>`);
+    mudou.pais = true;
+  }
+
+  if (!/<StreetNumber>/.test(b) && antigo.numero && /<Address>/.test(b)) {
+    b = b.replace(linhaDoElemento("Address"), (m) => `${m}${m.match(/^\n[ \t]*/)[0]}<StreetNumber>${antigo.numero}</StreetNumber>`);
+    mudou.numero = true;
+  }
+
+  // Valores: só a parte inteira, com currency="BRL" (condomínio menor que 1
+  // é lixo do cadastro, e 0 lá quer dizer isento: sai).
+  for (const tag of DINHEIRO) {
+    const m = b.match(elemento(tag));
+    if (!m) continue;
+    const n = Number(valor(b, tag));
+    if (tag === "PropertyAdministrationFee" && n > 0 && n < 1) {
+      b = b.replace(linhaDoElemento(tag), "");
+      mudou.formato = true;
+      continue;
+    }
+    if (tag === "YearlyTax") continue; // tratado junto com o Iptu abaixo
+    const periodo = (m[0].match(/\speriod="[^"]*"/) || [""])[0];
+    const novo = `<${tag} currency="BRL"${periodo}>${Number.isFinite(n) ? Math.round(n) : 0}</${tag}>`;
+    if (novo !== m[0]) { b = b.replace(m[0], novo); mudou.formato = true; }
+  }
+
+  for (const tag of AREAS) {
+    const m = b.match(elemento(tag));
+    if (!m) continue;
+    const n = Number(valor(b, tag));
+    const novo = `<${tag} unit="square metres">${Number.isFinite(n) ? Math.round(n) : 0}</${tag}>`;
+    if (novo !== m[0]) { b = b.replace(m[0], novo); mudou.formato = true; }
+  }
+  if (!TERRENO.test(tipo) && !(Number(valor(b, "LivingArea")) >= 1) && antigo.area_util) {
+    const novo = `<LivingArea unit="square metres">${antigo.area_util}</LivingArea>`;
+    b = elemento("LivingArea").test(b) ? b.replace(elemento("LivingArea"), novo) : inserirNoFim(b, "Details", novo);
+    mudou.area_util = true;
+  }
+
+  // IPTU: o valor do Vista quando é real (1 ou menos é marcador do cadastro),
+  // senão o do XML anterior, senão o padrão. Vai no YearlyTax e no Iptu novo.
+  if (/<Details>/.test(b)) {
+    const doVista = Number(valor(b, "YearlyTax"));
+    const iptu = doVista > 1 ? Math.round(doVista) : antigo.iptu ?? iptuPadrao;
+    if (!(doVista > 1)) mudou.iptu = true;
+    const anual = `<YearlyTax currency="BRL">${iptu}</YearlyTax>`;
+    if (elemento("YearlyTax").test(b)) {
+      const atual = b.match(elemento("YearlyTax"))[0];
+      if (atual !== anual) { b = b.replace(atual, anual); if (doVista > 1) mudou.formato = true; }
+    } else b = inserirNoFim(b, "Details", anual);
+    const novo = `<Iptu currency="BRL" period="Yearly">${iptu}</Iptu>`;
+    if (elemento("Iptu").test(b)) b = b.replace(elemento("Iptu"), novo);
+    else b = b.replace(linhaDoElemento("YearlyTax"), (m) => `${m}${m.match(/^\n[ \t]*/)[0]}${novo}`);
+  }
+
+  // Ano de construção (terreno não tem): Vista, XML anterior ou o padrão.
+  if (/<Details>/.test(b) && !TERRENO.test(tipo) && !(Number(valor(b, "YearBuilt")) >= 1800)) {
+    const novo = `<YearBuilt>${antigo.ano ?? anoPadrao}</YearBuilt>`;
+    b = elemento("YearBuilt").test(b) ? b.replace(elemento("YearBuilt"), novo) : inserirNoFim(b, "Details", novo);
+    mudou.ano = true;
+  }
+
+  // Características: as do XML anterior quando o Vista não manda nenhuma.
+  if (!/<Feature>/.test(b) && antigo.caracteristicas?.length && /<Details>/.test(b)) {
+    const ind = indentacaoFilhos(b, "Details");
+    const itens = antigo.caracteristicas.map((f) => `${ind}  <Feature>${escaparXml(f)}</Feature>`).join("\n");
+    const bloco = `<Features>\n${itens}\n${ind}</Features>`;
+    b = elemento("Features").test(b) ? b.replace(elemento("Features"), bloco) : inserirNoFim(b, "Details", bloco);
+    mudou.caracteristicas = true;
+  }
+  const oficial = b.replace(/<Feature>([^<]+)<\/Feature>/g, (m, f) => (CARACTERISTICA_OFICIAL[f.trim()] ? `<Feature>${escaparXml(CARACTERISTICA_OFICIAL[f.trim()])}</Feature>` : m));
+  if (oficial !== b) { b = oficial; mudou.formato = true; }
+
+  return { bloco: b, mudou };
+}
+
+function escaparXml(t) {
+  return t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 // ---------------------------------------------------------------- pendências
 
 /**
@@ -541,8 +652,9 @@ function trocarCdata(bloco, tag, texto) {
  * Enriquece um anúncio. `coordenadaDe(chave)` devolve {lat, lon} do cache de
  * geocodificação, ou null.
  */
-export function enriquecerAnuncio(bloco, { coordenadaDe = () => null, videoDe = () => null, tourDe = () => null, restaurarNomes } = {}) {
+export function enriquecerAnuncio(bloco, { coordenadaDe = () => null, videoDe = () => null, tourDe = () => null, antigoDe = () => null, restaurarNomes } = {}) {
   const a = lerAnuncio(bloco);
+  const antigo = (a.codigo && antigoDe(a.codigo)) || {};
   const mudou = { titulo: false, descricao: false, ficha: false, coordenada_adicionada: false, coordenada_descartada: false, uso: false, video: false, tour: false };
   let b = bloco;
 
@@ -565,7 +677,8 @@ export function enriquecerAnuncio(bloco, { coordenadaDe = () => null, videoDe = 
   const valida = a.temCoordenada && coordenadaPlausivel(a.lat, a.lon, a.uf);
   if (!valida) {
     const chave = chaveEndereco(a);
-    const coord = chave ? coordenadaDe(chave) : null;
+    let coord = chave ? coordenadaDe(chave) : null;
+    if (!(coord && coordenadaPlausivel(coord.lat, coord.lon, a.uf)) && antigo.lat) coord = { lat: antigo.lat, lon: antigo.lon };
     if (coord && coordenadaPlausivel(coord.lat, coord.lon, a.uf)) {
       b = trocarCoordenadas(b, coord);
       mudou.coordenada_adicionada = true;
@@ -595,13 +708,17 @@ export function enriquecerAnuncio(bloco, { coordenadaDe = () => null, videoDe = 
       if (novo !== b) { b = novo; mudou.tour = true; }
     }
   }
+
+  const p = ajustarPadrao(b, antigo);
+  b = p.bloco;
+  Object.assign(mudou, p.mudou);
   return { bloco: b, mudou };
 }
 
 /** Enriquece o feed inteiro. Cabeçalho, rodapé e ordem ficam como estão. */
 export function enriquecerFeed(xml, opcoes = {}) {
   const { cabecalho, blocos, rodape } = separar(xml);
-  const resumo = { titulo: 0, descricao: 0, ficha: 0, coordenada_adicionada: 0, coordenada_descartada: 0, uso: 0, video: 0, tour: 0, sem_coordenada: 0 };
+  const resumo = { titulo: 0, descricao: 0, ficha: 0, coordenada_adicionada: 0, coordenada_descartada: 0, uso: 0, video: 0, tour: 0, pais: 0, numero: 0, ano: 0, iptu: 0, area_util: 0, caracteristicas: 0, formato: 0, sem_coordenada: 0 };
   const nomes = blocos.flatMap((b) => [valor(b, "City"), valor(b, "Neighborhood")]);
   const restaurarNomes = restauradorDeNomes(nomes);
   const corpo = blocos.map((bloco) => {
