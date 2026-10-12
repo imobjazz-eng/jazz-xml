@@ -12,6 +12,28 @@ export const FOTOS_PORTAL = 16;
 /** Portais com a integração já ativada (o Chaves na Mão ainda depende de pedido ao portal). */
 export const PORTAIS_ATIVOS = ["zap"];
 
+/**
+ * Portais do maior para o menor em audiência (Similarweb, ranking Brasil de
+ * imóveis jul/2026 e visitas de dez/2024; OLX e Mercado Livre são
+ * generalistas, sem número só de imóveis). `canal`: arquivo que geramos.
+ * `doc`: verde = documentação oficial; amarelo = só por integrador de
+ * terceiros; vermelho = não encontrada. `vista`: citado como integrado ao Vista.
+ */
+export const PORTAIS = [
+  { nome: "ZAP Imóveis", grupo: "Grupo OLX", audiencia: "~15 mi visitas/mês · 1º", formato: "VRSync", doc: "verde", vista: true, canal: "zap" },
+  { nome: "VivaReal", grupo: "Grupo OLX", audiencia: "~15 mi visitas/mês", formato: "VRSync (mesmo arquivo do ZAP)", doc: "verde", vista: true, canal: "zap" },
+  { nome: "Chaves na Mão", grupo: "", audiencia: "~9,8 mi visitas/mês · 3º", formato: "Próprio (CNM)", doc: "verde", vista: true, canal: "chavesnamao" },
+  { nome: "ImovelWeb", grupo: "Navent / QuintoAndar", audiencia: "~6,7 mi visitas/mês", formato: "OpenNavent", doc: "amarelo", vista: true, canal: "imovelweb" },
+  { nome: "OLX", grupo: "Grupo OLX", audiencia: "generalista (47 mi, todas as categorias)", formato: "VRSync (mesmo arquivo do ZAP)", doc: "verde", vista: true, canal: "zap" },
+  { nome: "Wimoveis", grupo: "Navent / QuintoAndar", audiencia: "~1,3 mi visitas/mês", formato: "OpenNavent (mesmo arquivo do ImovelWeb)", doc: "amarelo", vista: false, canal: "imovelweb" },
+  { nome: "DF Imóveis", grupo: "", audiencia: "~1,3 mi visitas/mês", formato: "Não publicado (aprovação manual)", doc: "vermelho", vista: false, canal: null },
+  { nome: "Casa Mineira", grupo: "QuintoAndar", audiencia: "top 10 de concorrentes do ZAP", formato: "OpenNavent (mesmo arquivo do ImovelWeb)", doc: "amarelo", vista: true, canal: "imovelweb" },
+  { nome: "Mercado Livre Imóveis", grupo: "Mercado Livre", audiencia: "generalista (160 mi, varejo inteiro)", formato: "API (não XML)", doc: "verde", vista: true, canal: null },
+  { nome: "Netimóveis", grupo: "", audiencia: "~390 mil visitas/mês", formato: "Não encontrado", doc: "vermelho", vista: false, canal: null },
+  { nome: "123i", grupo: "", audiencia: "sem dado", formato: "Próprio (não publicado)", doc: "vermelho", vista: true, canal: null },
+  { nome: "Imóveis SC", grupo: "", audiencia: "sem dado recente", formato: "Próprio (manual de 2017)", doc: "amarelo", vista: false, canal: null },
+];
+
 const pct = (n, total) => (total ? Math.round((n / total) * 1000) / 10 : 0);
 const pior = (...s) => (s.includes("vermelho") ? "vermelho" : s.includes("amarelo") ? "amarelo" : "verde");
 const faixa = (falta, total, amarelo, vermelho) => {
@@ -109,5 +131,22 @@ export function montarSaude(xml, info = {}) {
       !iw ? "Arquivo não gerado nesta execução" : `${iw.total} imóveis${iw.fora ? ` · ${iw.fora} sem campo obrigatório do portal` : ""}${iw.temCodigo ? "" : " · falta o código da Jazz no portal"}`,
       "O portal lê uma vez por dia."),
   ];
-  return { geradoEm: (info.agora || new Date()).toISOString(), commit: info.commit || "", geral: pior(...canais.map((c) => c.status)), etapas, canais, avisos: (info.avisos || []).slice(0, 20), numeros: m };
+  // Tabela de portais: uma linha por portal, uma coluna por etapa da integração.
+  // "cinza" = etapa ainda não iniciada para aquele portal.
+  const porId = Object.fromEntries(canais.map((c) => [c.id, c]));
+  const portais = PORTAIS.map((p) => {
+    const c = p.canal ? porId[p.canal] : null;
+    return {
+      nome: p.nome, grupo: p.grupo, audiencia: p.audiencia, formato: p.formato,
+      etapas: {
+        documentacao: { status: p.doc, texto: p.doc === "verde" ? "Oficial" : p.doc === "amarelo" ? "De terceiros" : "Não encontrada" },
+        vista: { status: p.vista ? "verde" : "amarelo", texto: p.vista ? "Integrado ao Vista" : "Fora da lista do Vista" },
+        dados: c ? { status: statusEtapas, texto: statusEtapas === "verde" ? "Completos" : "Com pendências (fotos, tour...)" } : { status: "cinza", texto: "—" },
+        arquivo: c ? { status: c.statusArquivo, texto: c.arquivo, link: c.arquivo } : { status: "cinza", texto: p.formato.startsWith("API") ? "Exige API" : "Não gerado" },
+        publicacao: c ? { status: "publicacao", texto: "A cada 10 min" } : { status: "cinza", texto: "—" },
+        portal: c ? { status: c.ativacao.status, texto: c.ativacao.status === "verde" ? "Ativo" : "Ativar no portal" } : { status: "cinza", texto: "—" },
+      },
+    };
+  });
+  return { geradoEm: (info.agora || new Date()).toISOString(), commit: info.commit || "", geral: pior(...canais.map((c) => c.status)), etapas, canais, portais, avisos: (info.avisos || []).slice(0, 20), numeros: m };
 }

@@ -292,6 +292,8 @@ console.log("saude.mjs — painel de saúde dos XMLs");
   const s = montarSaude(xml, { noArquivo: 12, ativosNaApi: 10, excluidos: {}, maximo: 10, minimo: 5, chavesNaMao: 10, agora: new Date("2026-10-12T12:00:00Z") });
   const st = Object.fromEntries(s.etapas.map((e) => [e.id, e.status]));
   ok("etapas com verde/amarelo/vermelho", st.vista === "verde" && st.api === "verde" && st.selecao === "verde" && st.fotos === "vermelho" && st.video === "vermelho", JSON.stringify(st));
+  ok("tabela com 10+ portais, do canal certo", s.portais.length >= 10 && s.portais[0].nome === "ZAP Imóveis" && s.portais[0].etapas.arquivo.link === "vrsync.xml"
+    && s.portais.find((p) => p.nome === "DF Imóveis").etapas.arquivo.status === "cinza");
   ok("geral é o pior dos canais; os dois canais presentes", s.geral === "vermelho" && s.canais.map((c) => c.id).join() === "zap,chavesnamao,imovelweb" && s.geradoEm === "2026-10-12T12:00:00.000Z");
   const s2 = montarSaude(xml, { noArquivo: 12, ativosNaApi: null, enriquecimentoOk: false, chavesNaMao: null, maximo: 10 });
   const st2 = Object.fromEntries(s2.etapas.map((e) => [e.id, e.status]));
