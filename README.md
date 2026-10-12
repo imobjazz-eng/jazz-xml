@@ -1,7 +1,7 @@
 # jazz-xml
 
 Feed XML (VRSync) dos imóveis da Jazz para os portais (Canal Pró / Grupo ZAP),
-gerado de hora em hora direto da API do Vista.
+gerado a cada 10 minutos direto do Vista: imóvel desativado no Vista sai do XML e reativado volta, quase em tempo real.
 
 Projeto separado do Jazz Conecta (a plataforma), que fica em
 `imobjazz-eng/jazz-lead-conecta`. Este repositório só gera o XML.

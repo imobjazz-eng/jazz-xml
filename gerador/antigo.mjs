@@ -1,7 +1,7 @@
 /**
  * Dados do XML anterior (o "Jazz Smart Feed Engine", congelado em 22/09/2026
  * no Worker da Cloudflare) que o XML do Vista não traz: número do endereço,
- * ano de construção, IPTU, área útil, coordenada e características.
+ * ano de construção, IPTU, área útil, coordenada, bairro e características.
  *
  * A extração é feita uma vez e guardada como antigo.json no gh-pages, ao lado
  * do XML (mesmo esquema do geocode.json): o Worker pode sumir, a cópia não.
@@ -41,6 +41,8 @@ export function extrairAntigo(xml) {
     const lat = Number(valor(bloco, "Latitude"));
     const lon = Number(valor(bloco, "Longitude"));
     if (lat && lon && Number.isFinite(lat) && Number.isFinite(lon)) { d.lat = lat; d.lon = lon; }
+    const bairro = valor(bloco, "Neighborhood");
+    if (bairro) d.bairro = bairro;
     const caracteristicas = [...bloco.matchAll(/<Feature>([^<]+)<\/Feature>/g)].map((m) => m[1].trim());
     if (caracteristicas.length) d.caracteristicas = caracteristicas;
     if (Object.keys(d).length) dados[codigo] = d;
