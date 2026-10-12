@@ -100,8 +100,20 @@ jobs:
             echo "Sem cópia no gh-pages: o gerador extrai do Worker"
           fi
 
+      # Tours 360 já publicados: fotos enviadas pelo celular não são baixadas
+      # de novo a cada 10 minutos (ver gerador/tour360.mjs).
+      - name: Recuperar tours 360 publicados
+        run: |
+          mkdir -p cache
+          if git fetch -q --depth=1 origin gh-pages 2>/dev/null && git archive FETCH_HEAD tour360 2>/dev/null | tar -x -C cache 2>/dev/null; then
+            echo "Tours 360 anteriores: $(ls cache/tour360/d 2>/dev/null | wc -l)"
+          else
+            echo "Sem tours 360 anteriores"
+          fi
+
       - name: Gerar XML a partir do Vista
         env:
+          TOURS360_CACHE: cache/tour360
           ANTIGO_CACHE: cache/antigo.json
           GEOCODE_CACHE: cache/geocode.json
           GEO_LIMITE: ${{ vars.GEO_LIMITE || '35' }} # por execução; ~200 por hora
@@ -132,7 +144,7 @@ jobs:
           mkdir -p site/tour && cp tour/index.html site/tour/index.html
           # Tour 360: a página; fotos e dados (tour360/f, tour360/d) o gerador
           # já gravou a partir de tours360/ (ver tours360/README.md).
-          mkdir -p site/tour360 && cp tour360/index.html site/tour360/index.html
+          mkdir -p site/tour360 && cp tour360/*.html site/tour360/
           cd site
           touch .nojekyll
           cat > index.html <<HTML

@@ -1,5 +1,13 @@
 # Tour 360° — como enviar
 
+**Jeito mais fácil (celular, sem login):** abra
+<https://imobjazz-eng.github.io/jazz-xml/tour360/enviar.html>, digite o código do imóvel e o código de acesso
+da equipe, adicione as fotos 360, marque a porta de cada ambiente (opcional) e toque em **Publicar tour**.
+A página confere se a foto é 360, reduz o tamanho no próprio celular e o tour entra no anúncio em até 10 minutos.
+Para editar depois (ordem, nomes, portas, fotos), abra o mesmo código de novo.
+
+O envio pelo GitHub, abaixo, continua funcionando para quem preferir.
+
 O corretor faz só duas coisas: **fotografar** e **enviar**. A montagem do tour, a página e o link no
 XML dos portais saem sozinhos em até ~10 minutos.
 
@@ -12,7 +20,7 @@ XML dos portais saem sozinhos em até ~10 minutos.
 - A foto precisa sair em **JPG no formato 2:1** (ex.: 8000 x 4000). Foto comum ou panorama "faixa" é
   ignorada e aparece como aviso no log da geração.
 
-## 2. Enviar (pelo navegador ou celular)
+## 2. Enviar pelo GitHub (alternativa)
 
 1. Abra <https://github.com/imobjazz-eng/jazz-xml/tree/main/tours360>.
 2. **Add file → Upload files**.
