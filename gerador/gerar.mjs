@@ -40,6 +40,7 @@ import { TOUR360_BASE, lerTours360, linkDoTour360, publicarTours360, carregarTou
 import { geocodificar, consultaCache } from "./geocodificar.mjs";
 import { ANTIGO_URL, extrairAntigo } from "./antigo.mjs";
 import { paraChavesNaMao } from "./chavesnamao.mjs";
+import { montarSaude } from "./saude.mjs";
 
 const destino = process.argv[2] || "saida/vrsync.xml";
 const VIDEOS_URL = "https://raw.githubusercontent.com/imobjazz-eng/jazz-videos/main/videos.json";
@@ -116,6 +117,10 @@ try {
   console.log(`XML do Vista: ${r.noArquivo} anúncios. API do Vista: ${r.ativosNaApi ?? "indisponível"} códigos ativos.`);
   console.log(`Publicados: ${r.publicados}. Fora do feed:`, r.excluidos);
   for (const a of r.avisos) console.log(`::warning::${a}`);
+  // Painel de saúde (saude.json → saude.html): avisos desta execução.
+  const avisos = [...r.avisos];
+  const aviso = (a) => { avisos.push(a); console.log(`::warning::${a}`); };
+  let enriquecimentoOk = true, tours360Ok = true, totalChavesNaMao = null;
 
   // Geocodificação: erro aqui nunca impede a publicação.
   let cache = {};
@@ -131,7 +136,7 @@ try {
     intervaloMs: numero(process.env.GEO_INTERVALO_MS, 1100),
   });
   console.log(`Geocodificação: ${geo.pendentes} endereços pendentes, ${geo.consultados} consultados, ${geo.achados} achados.`, geo.falhas);
-  if (geo.erro) console.log(`::warning::Geocodificação interrompida: ${geo.erro}`);
+  if (geo.erro) aviso(`Geocodificação interrompida: ${geo.erro}`);
 
   // Enriquecimento com defeito não derruba o feed: publica o XML sem ele.
   let e;
@@ -142,7 +147,7 @@ try {
   try {
     const lidos = await lerTours360(process.env.TOURS360_DIR || fileURLToPath(new URL("../tours360", import.meta.url)));
     tours360 = lidos.tours;
-    for (const a of lidos.avisos) console.log(`::warning::${a}`);
+    for (const a of lidos.avisos) aviso(a);
     // Enviados pelo celular têm preferência sobre a pasta do repositório.
     if (process.env.TOURS360_API !== "desligado") {
       try {
@@ -150,7 +155,8 @@ try {
         for (const [c, t] of remotos) tours360.set(c, t);
         console.log(`Tour 360 enviados pelo celular: ${remotos.size} imóveis.`);
       } catch (err) {
-        console.log(`::warning::Lista de tours 360 do celular indisponível: ${err.message}`);
+        tours360Ok = false;
+        aviso(`Lista de tours 360 do celular indisponível: ${err.message}`);
       }
     }
     if (tours360.size) console.log(`Tour 360: ${tours360.size} imóveis com fotos 360.`);
@@ -195,7 +201,8 @@ try {
     e = enriquecerFeed(r.xml, { coordenadaDe: consultaCache(cache), videoDe, tourDe, antigoDe });
     console.log("Enriquecimento (anúncios alterados):", e.resumo);
   } catch (err) {
-    console.log(`::warning::Enriquecimento falhou, publicando sem ele: ${err.message}`);
+    enriquecimentoOk = false;
+    aviso(`Enriquecimento falhou, publicando sem ele: ${err.message}`);
     e = { xml: r.xml };
     tours.clear();
     usados360.clear();
@@ -214,7 +221,7 @@ try {
   if (usados360.size) {
     try {
       const falhas = await publicarTours360(usados360, dirname(destino), { cache: process.env.TOURS360_CACHE || null });
-      for (const f of falhas) console.log(`::warning::Tour 360 não publicado: ${f}`);
+      for (const f of falhas) aviso(`Tour 360 não publicado: ${f}`);
     } catch (err) {
       console.log(`::warning::Fotos do tour 360 não publicadas: ${err.message}`);
     }
@@ -225,14 +232,26 @@ try {
   try {
     const cnm = paraChavesNaMao(e.xml);
     await writeFile(join(dirname(destino), "chavesnamao.xml"), cnm.xml);
+    totalChavesNaMao = cnm.total;
     console.log(`Chaves na Mão: ${cnm.total} imóveis em chavesnamao.xml.`);
   } catch (err) {
-    console.log(`::warning::XML do Chaves na Mão não gerado: ${err.message}`);
+    aviso(`XML do Chaves na Mão não gerado: ${err.message}`);
   }
   try {
     await writeFile(join(dirname(destino), "pendencias.csv"), planilhaPendencias(e.xml));
   } catch (err) {
     console.log(`::warning::Planilha de pendências não gerada: ${err.message}`);
+  }
+  try {
+    const saude = montarSaude(e.xml, {
+      noArquivo: r.noArquivo, ativosNaApi: r.ativosNaApi, excluidos: r.excluidos, avisos, geoErro: geo.erro || "",
+      enriquecimentoOk, tours360Ok, chavesNaMao: totalChavesNaMao, commit: (process.env.GITHUB_SHA || "").slice(0, 7),
+      minimo: numero(process.env.FEED_MINIMO, 1000), maximo: numero(process.env.FEED_MAXIMO, 3000),
+    });
+    await writeFile(join(dirname(destino), "saude.json"), JSON.stringify(saude, null, 1));
+    console.log(`Saúde: ${saude.geral} (${saude.etapas.map((x) => `${x.id}=${x.status}`).join(", ")}).`);
+  } catch (err) {
+    console.log(`::warning::saude.json não gerado: ${err.message}`);
   }
   console.log(`Gravado ${destino} (${(Buffer.byteLength(e.xml) / 1048576).toFixed(1)} MB).`);
 } catch (e) {

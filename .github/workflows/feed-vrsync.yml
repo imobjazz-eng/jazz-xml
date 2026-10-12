@@ -149,11 +149,14 @@ jobs:
           # Tour 360: a página; fotos e dados (tour360/f, tour360/d) o gerador
           # já gravou a partir de tours360/ (ver tours360/README.md).
           mkdir -p site/tour360 && cp tour360/*.html site/tour360/
+          # Painel de saúde: a página; os dados (saude.json) o gerador gravou.
+          mkdir -p site/saude && cp saude/index.html site/saude/index.html
           cd site
           touch .nojekyll
           cat > index.html <<HTML
           <!doctype html><meta charset="utf-8"><title>Feed VRSync Jazz</title>
           <p>Feed dos portais: <a href="vrsync.xml">vrsync.xml</a> (Grupo ZAP) · <a href="chavesnamao.xml">chavesnamao.xml</a> (Chaves na Mão)</p>
+          <p>Saúde dos XMLs: <a href="saude/">painel</a></p>
           <p>Gerado em $(date -u +"%Y-%m-%d %H:%M UTC") pelo commit ${GITHUB_SHA::7}.</p>
           HTML
           git init -q -b gh-pages
