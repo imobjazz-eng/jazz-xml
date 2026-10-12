@@ -14,6 +14,7 @@ import { fichaDoImovel, enriquecerTitulo, enriquecerDescricao, enriquecerAnuncio
 import { escolherResultado, geocodificar, precisaConsultar, mesmaVia } from "./geocodificar.mjs";
 import { extrairAntigo } from "./antigo.mjs";
 import { paraChavesNaMao, imovelChavesNaMao } from "./chavesnamao.mjs";
+import { montarSaude } from "./saude.mjs";
 import { dadosDaApi } from "./vista.mjs";
 import { ajustarPadrao, notaEstimada, errosObrigatorios, headerForaDeListings } from "./enriquecer.mjs";
 import { TOUR_BASE, codigoDoTour, fotosDoAnuncio, dadosDoTour, inserirTour, linkDoTour } from "./tour.mjs";
@@ -262,6 +263,18 @@ console.log("chavesnamao.mjs — XML do Chaves na Mão a partir do VRSync enriqu
   const r = paraChavesNaMao(`<Listings>${vr}${vr.replace("<ListingID>700", "<ListingID>701").replace(/<ListPrice[^<]*<\/ListPrice>/, "").replace("Sale/Rent", "For Sale")}</Listings>`);
   const tags = (r.xml.match(/<imovel>[\s\S]*?<\/imovel>/) || [""])[0].match(/^ {6}<(\w+)/gm) || [];
   ok("todas as 53 tags presentes; sem preço fica de fora", r.total === 1 && tags.length === 53 && r.xml.includes("<titulo><![CDATA[Casa & quintal]]></titulo>"), `${r.total} imóveis, ${tags.length} tags`);
+}
+
+console.log("saude.mjs — painel de saúde dos XMLs");
+{
+  const xml = feed(Array.from({ length: 10 }, (_, i) => [String(600 + i), i < 3 ? 8 : 20]));
+  const s = montarSaude(xml, { noArquivo: 12, ativosNaApi: 10, excluidos: {}, maximo: 10, minimo: 5, chavesNaMao: 10, agora: new Date("2026-10-12T12:00:00Z") });
+  const st = Object.fromEntries(s.etapas.map((e) => [e.id, e.status]));
+  ok("etapas com verde/amarelo/vermelho", st.vista === "verde" && st.api === "verde" && st.selecao === "verde" && st.fotos === "vermelho" && st.video === "vermelho", JSON.stringify(st));
+  ok("geral é o pior dos canais; os dois canais presentes", s.geral === "vermelho" && s.canais.map((c) => c.id).join() === "zap,chavesnamao" && s.geradoEm === "2026-10-12T12:00:00.000Z");
+  const s2 = montarSaude(xml, { noArquivo: 12, ativosNaApi: null, enriquecimentoOk: false, chavesNaMao: null, maximo: 10 });
+  const st2 = Object.fromEntries(s2.etapas.map((e) => [e.id, e.status]));
+  ok("API fora: amarelo; enriquecimento falho e Chaves na Mão ausente: vermelho", st2.api === "amarelo" && st2.enriquecimento === "vermelho" && s2.canais[1].status === "vermelho");
 }
 
 console.log("antigo.mjs e padrão VRSync (documentação do Grupo ZAP)");

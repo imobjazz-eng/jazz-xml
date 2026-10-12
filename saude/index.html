@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Saúde dos XMLs</title>
+<style>
+  /* Painel de saúde dos XMLs dos portais. Lê ../saude.json, gravado pelo
+     gerador a cada execução (gerador/saude.mjs). A frescura é calculada
+     aqui: se o gerador parar, a página fica vermelha sozinha. */
+  :root {
+    color-scheme: light dark;
+    --fundo: #f5f6f8; --cartao: #ffffff; --texto: #1c2026; --suave: #5d6673; --linha: #e1e5ea;
+    --verde: #0f7b43; --verde-fundo: #e5f4ec; --amarelo: #8a5a00; --amarelo-fundo: #fdf3dc;
+    --vermelho: #b42318; --vermelho-fundo: #fde8e6; --acento: #0b63c4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --fundo: #111418; --cartao: #1a1e24; --texto: #e7eaee; --suave: #a2aab5; --linha: #2b3139;
+      --verde: #4cc98a; --verde-fundo: #12291d; --amarelo: #f2c14e; --amarelo-fundo: #2c2410;
+      --vermelho: #f6877b; --vermelho-fundo: #321613; --acento: #6aaefc;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--fundo); color: var(--texto); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 920px; margin: 0 auto; padding: 20px 16px 48px; }
+  h1 { font-size: 22px; margin: 0; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--suave); margin: 28px 0 10px; font-weight: 600; }
+  a { color: var(--acento); }
+  .topo { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+  .sub { color: var(--suave); font-size: 13px; margin-top: 2px; }
+  .geral { display: flex; align-items: center; gap: 14px; padding: 16px; border-radius: 12px; margin-top: 16px; border: 1px solid var(--linha); background: var(--cartao); }
+  .geral strong { font-size: 18px; display: block; }
+  .selo { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 3px 10px 3px 8px; border-radius: 999px; white-space: nowrap; }
+  .selo::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+  .verde { color: var(--verde); } .selo.verde { background: var(--verde-fundo); }
+  .amarelo { color: var(--amarelo); } .selo.amarelo { background: var(--amarelo-fundo); }
+  .vermelho { color: var(--vermelho); } .selo.vermelho { background: var(--vermelho-fundo); }
+  .bola { width: 36px; height: 36px; border-radius: 50%; flex: none; background: currentColor; box-shadow: 0 0 0 6px color-mix(in srgb, currentColor 18%, transparent); }
+  .canais { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+  .cartao { background: var(--cartao); border: 1px solid var(--linha); border-radius: 12px; padding: 14px 16px; }
+  .cartao h3 { font-size: 16px; margin: 0 0 6px; display: flex; justify-content: space-between; gap: 8px; align-items: start; }
+  .cartao p { margin: 4px 0; color: var(--suave); font-size: 13px; }
+  .cartao .num { color: var(--texto); font-size: 15px; font-weight: 600; }
+  ol.etapas { list-style: none; margin: 0; padding: 0; background: var(--cartao); border: 1px solid var(--linha); border-radius: 12px; }
+  ol.etapas li { display: grid; grid-template-columns: 28px 1fr auto; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--linha); align-items: start; }
+  ol.etapas li:first-child { border-top: 0; }
+  .passo { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; color: var(--cartao); }
+  .passo.verde { background: var(--verde); } .passo.amarelo { background: var(--amarelo); } .passo.vermelho { background: var(--vermelho); }
+  .nome { font-weight: 600; }
+  .resumo { font-size: 14px; }
+  .detalhe { font-size: 12px; color: var(--suave); }
+  ul.avisos { margin: 0; padding: 12px 16px 12px 32px; background: var(--cartao); border: 1px solid var(--linha); border-radius: 12px; font-size: 13px; }
+  .legenda { display: flex; gap: 8px; flex-wrap: wrap; font-size: 12px; color: var(--suave); margin-top: 10px; }
+  #erro { display: none; }
+  body.falhou #erro { display: block; } body.falhou #conteudo { display: none; }
+  @media (max-width: 520px) { ol.etapas li { grid-template-columns: 28px 1fr; } ol.etapas li .selo { grid-column: 2; justify-self: start; } }
+</style>
+</head>
+<body>
+<main>
+  <div class="topo">
+    <div><h1>Saúde dos XMLs dos portais</h1><div class="sub" id="quando">Carregando…</div></div>
+    <div class="sub">Atualiza sozinha a cada minuto</div>
+  </div>
+
+  <div id="erro" class="geral vermelho"><div class="bola"></div><div><strong>Sem dados de saúde</strong>
+    <span class="sub">O arquivo saude.json não foi encontrado. O gerador pode estar parado.</span></div></div>
+
+  <div id="conteudo">
+    <div class="geral" id="geral"><div class="bola"></div><div><strong id="geral-texto"></strong><span class="sub" id="geral-sub"></span></div></div>
+
+    <h2>Canais</h2>
+    <div class="canais" id="canais"></div>
+
+    <h2>Etapas do processo</h2>
+    <ol class="etapas" id="etapas"></ol>
+
+    <div id="bloco-avisos"><h2>Avisos da última geração</h2><ul class="avisos" id="avisos"></ul></div>
+
+    <div class="legenda">
+      <span class="selo verde">Verde: funcionando</span>
+      <span class="selo amarelo">Amarelo: funcionando com pendência</span>
+      <span class="selo vermelho">Vermelho: precisa de ação</span>
+    </div>
+  </div>
+</main>
+<script>
+(function () {
+  "use strict";
+  var NOMES = { verde: "Tudo funcionando", amarelo: "Funcionando, com pendências", vermelho: "Precisa de ação" };
+  var ROTULO = { verde: "Verde", amarelo: "Amarelo", vermelho: "Vermelho" };
+  var BASE = "https://imobjazz-eng.github.io/jazz-xml/";
+  function $(id) { return document.getElementById(id); }
+  function pior(a, b) { var o = ["verde", "amarelo", "vermelho"]; return o[Math.max(o.indexOf(a), o.indexOf(b))]; }
+  function el(tag, cls, texto) { var e = document.createElement(tag); if (cls) e.className = cls; if (texto != null) e.textContent = texto; return e; }
+  function selo(s) { return el("span", "selo " + s, ROTULO[s] || s); }
+  function minutos(iso) { return Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000)); }
+  function tempo(min) { return min < 1 ? "agora" : min < 60 ? "há " + min + " min" : "há " + Math.floor(min / 60) + " h " + (min % 60) + " min"; }
+
+  function desenhar(s) {
+    // Publicação: a cada 10 min; GitHub pode atrasar. >25 min amarelo, >70 vermelho.
+    var min = minutos(s.geradoEm);
+    var pub = min > 70 ? "vermelho" : min > 25 ? "amarelo" : "verde";
+    var etapas = s.etapas.concat([{ id: "publicacao", nome: "Publicação no GitHub Pages", status: pub,
+      resumo: "Última geração " + tempo(min), detalhe: "Esperado: a cada 10 minutos." + (s.commit ? " Versão " + s.commit + "." : "") }]);
+    var geral = pior(s.geral, pub);
+
+    $("quando").textContent = "Última geração: " + new Date(s.geradoEm).toLocaleString("pt-BR") + " (" + tempo(min) + ")";
+    var g = $("geral"); g.className = "geral " + geral;
+    $("geral-texto").textContent = NOMES[geral];
+    var problemas = etapas.filter(function (e) { return e.status !== "verde"; }).map(function (e) { return e.nome; });
+    $("geral-sub").textContent = problemas.length ? "Atenção: " + problemas.join(", ") + "." : "Todas as etapas e canais estão verdes.";
+
+    var canais = $("canais"); canais.innerHTML = "";
+    s.canais.forEach(function (c) {
+      var st = pior(c.status, pub);
+      var card = el("div", "cartao");
+      var h = el("h3"); h.appendChild(el("span", null, c.nome)); h.appendChild(selo(st)); card.appendChild(h);
+      card.appendChild(el("p", "num", c.resumo));
+      var p = el("p"); var a = el("a", null, BASE + c.arquivo); a.href = BASE + c.arquivo; p.appendChild(a); card.appendChild(p);
+      card.appendChild(el("p", null, c.leitura));
+      canais.appendChild(card);
+    });
+
+    var ol = $("etapas"); ol.innerHTML = "";
+    etapas.forEach(function (e, i) {
+      var li = el("li");
+      var passo = el("div", "passo " + e.status); passo.appendChild(el("span", null, String(i + 1))); li.appendChild(passo);
+      var d = el("div"); d.appendChild(el("div", "nome", e.nome)); d.appendChild(el("div", "resumo", e.resumo));
+      if (e.detalhe) d.appendChild(el("div", "detalhe", e.detalhe));
+      li.appendChild(d); li.appendChild(selo(e.status)); ol.appendChild(li);
+    });
+
+    var av = $("avisos"); av.innerHTML = "";
+    (s.avisos || []).forEach(function (t) { av.appendChild(el("li", null, t)); });
+    $("bloco-avisos").style.display = (s.avisos || []).length ? "" : "none";
+    document.body.classList.remove("falhou");
+  }
+
+  function carregar() {
+    fetch("../saude.json", { cache: "no-store" })
+      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(desenhar)
+      .catch(function () { document.body.classList.add("falhou"); $("quando").textContent = "Sem dados"; });
+  }
+  carregar();
+  setInterval(carregar, 60000);
+})();
+</script>
+</body>
+</html>
