@@ -67,6 +67,17 @@
   .legenda { display: flex; gap: 8px; flex-wrap: wrap; font-size: 12px; color: var(--suave); margin-top: 10px; }
   details summary { cursor: pointer; margin: 28px 0 10px; color: var(--suave); }
   details summary h2 { margin: 0; }
+  .tabela-rolagem { overflow-x: auto; background: var(--cartao); border: 1px solid var(--linha); border-radius: 12px; }
+  table.portais { border-collapse: collapse; width: 100%; min-width: 860px; font-size: 13px; }
+  table.portais th, table.portais td { padding: 9px 10px; border-top: 1px solid var(--linha); text-align: left; vertical-align: top; }
+  table.portais thead th { border-top: 0; font-size: 12px; color: var(--suave); font-weight: 600; white-space: nowrap; }
+  table.portais td.nome { font-weight: 600; white-space: nowrap; }
+  table.portais td.nome small { display: block; font-weight: 400; color: var(--suave); }
+  table.portais td.aud { color: var(--suave); }
+  .cel { display: inline-flex; align-items: flex-start; gap: 6px; }
+  .cel::before { content: ""; width: 10px; height: 10px; border-radius: 50%; margin-top: 4px; flex: none; background: var(--linha); }
+  .cel.verde::before { background: var(--verde); } .cel.amarelo::before { background: var(--amarelo); } .cel.vermelho::before { background: var(--vermelho); }
+  .cel.cinza { color: var(--suave); }
   #erro { display: none; }
   body.falhou #erro { display: block; } body.falhou #conteudo { display: none; }
   @media (max-width: 520px) { ol.etapas li { grid-template-columns: 28px 1fr; } ol.etapas li .selo { grid-column: 2; justify-self: start; } }
@@ -85,6 +96,13 @@
   <div id="conteudo">
     <div class="geral" id="geral"><div class="bola"></div><div><strong id="geral-texto"></strong><span class="sub" id="geral-sub"></span></div></div>
 
+    <h2>Portais, do maior para o menor</h2>
+    <div class="tabela-rolagem"><table class="portais" id="portais">
+      <thead><tr><th scope="col">#</th><th scope="col">Portal</th><th scope="col">Audiência</th><th scope="col">1. Documentação</th>
+        <th scope="col">2. Vista</th><th scope="col">3. Dados</th><th scope="col">4. Arquivo</th><th scope="col">5. Publicação</th><th scope="col">6. Portal</th></tr></thead>
+      <tbody></tbody></table></div>
+    <p class="sub">Audiência: Similarweb (ranking jul/2026, visitas dez/2024). Cinza: etapa ainda não iniciada para o portal.</p>
+
     <h2>Linha de cada portal</h2>
     <div class="canais" id="canais"></div>
 
@@ -97,6 +115,7 @@
       <span class="selo verde">Verde: funcionando</span>
       <span class="selo amarelo">Amarelo: funcionando com pendência</span>
       <span class="selo vermelho">Vermelho: precisa de ação</span>
+      <span class="selo" style="color:var(--suave)">Cinza: não iniciado</span>
     </div>
   </div>
 </main>
@@ -158,6 +177,22 @@
       var p = el("p"); p.appendChild(document.createTextNode(c.resumo + " · ")); var a = el("a", null, c.arquivo); a.href = BASE + c.arquivo; p.appendChild(a);
       p.appendChild(document.createTextNode(" · " + c.leitura)); card.appendChild(p);
       canais.appendChild(card);
+    });
+
+    var tb = document.querySelector("#portais tbody"); tb.innerHTML = "";
+    (s.portais || []).forEach(function (p, i) {
+      var tr = el("tr");
+      tr.appendChild(el("td", null, String(i + 1)));
+      var nome = el("td", "nome", p.nome); if (p.grupo) nome.appendChild(el("small", null, p.grupo)); tr.appendChild(nome);
+      tr.appendChild(el("td", "aud", p.audiencia));
+      ["documentacao", "vista", "dados", "arquivo", "publicacao", "portal"].forEach(function (k) {
+        var e = p.etapas[k], st = e.status === "publicacao" ? pub : e.status;
+        var td = el("td"), c = el("span", "cel " + st);
+        c.setAttribute("aria-label", (ROTULO[st] || "Não iniciado") + ": " + e.texto);
+        if (e.link) { var a = el("a", null, e.texto); a.href = BASE + e.link; c.appendChild(a); } else c.appendChild(document.createTextNode(e.texto));
+        td.appendChild(c); tr.appendChild(td);
+      });
+      tb.appendChild(tr);
     });
 
     var ol = $("etapas"); ol.innerHTML = "";
