@@ -117,6 +117,9 @@ ok("descrição curta ganha a ficha só com dados do anúncio",
 ok("sem linhas em branco em excesso", !/\n{3,}/.test(d.texto));
 d = enriquecerDescricao("CASA COM PISCINA E CHURRASQUEIRA NO CENTRO DE SÃO JOSÉ DOS CAMPOS. ACEITA FINANCIAMENTO PELO FGTS.", anuncio, { curta: 0, restaurarNomes: (t) => t.replace(/são josé dos campos/gi, "São José dos Campos") });
 ok("linha em maiúsculas vira frase, preservando sigla e nome", d.texto === "Casa com piscina e churrasqueira no centro de São José dos Campos. Aceita financiamento pelo FGTS.", d.texto);
+d = enriquecerDescricao("**Galpão no Centro**\n\n* Segurança 24h\n= Lazer completo\nFale com a imobiliária Jazz.com. Perto da Vila Bethânia.com permuta. Lar perfeito.Com piscina. Em Ubatuba.(400 m da praia). Área de 2.500 m², R$ 1.200,50 e site.com.br", anuncio, { curta: 0 });
+ok("Markdown e domínio colado saem da descrição",
+  d.texto === "Galpão no Centro\n\n- Segurança 24h\n- Lazer completo\nFale com a imobiliária Jazz. Perto da Vila Bethânia. Com permuta. Lar perfeito. Com piscina. Em Ubatuba. (400 m da praia). Área de 2.500 m², R$ 1.200,50 e site.com.br", d.texto);
 d = enriquecerDescricao("Frase completa. ".repeat(250), anuncio);
 ok("descrição longa cortada em frase inteira (até 3000) e a ficha no fim, inteira", d.texto.length <= 3000 && d.ficha && /completa\.\n\nFicha do imóvel:/.test(d.texto) && d.texto.endsWith(fichaDoImovel(anuncio)), d.texto.length);
 d = enriquecerDescricao("Frase completa. ".repeat(250), anuncio, { curta: 900 });

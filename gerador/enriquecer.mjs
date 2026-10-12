@@ -181,6 +181,23 @@ function semHtml(t) {
   return t.replace(/<\s*(br|\/p|p|\/li|li|\/div)\b[^>]*>/gi, "\n").replace(/<\/?[a-z][^>]*>/gi, " ");
 }
 
+/**
+ * Texto puro para o portal (relatório do Canal Pro de 12/10/2026, descrições
+ * marcadas como incompletas): sem marcação de Markdown ("**negrito**",
+ * tópico com "*" ou "=") e sem domínio colado no texto ("Jazz.com",
+ * "Bethânia.com condição"), que o portal lê como link.
+ */
+export function semMarcacao(t) {
+  return t
+    .replace(/\*\*/g, "")
+    .replace(/^[ \t]*[*=•][ \t]+/gm, "- ")
+    .replace(/\*/g, "")
+    .replace(/\b(imobili[aá]ria )?jazz\.com(\.br)?\b/gi, (_, imob) => (imob ? `${imob}Jazz` : "Jazz Imobiliária"))
+    .replace(/(\p{Ll}{2,})\.com\b(?!\.)/gu, "$1. Com")
+    .replace(/(\p{Ll}{2,})\.(\p{Lu}\p{Ll})/gu, "$1. $2")
+    .replace(/(\p{Ll}{2,})\.\(/gu, "$1. (");
+}
+
 const ehCaixaAlta = (t, proporcao) => {
   const letras = t.match(/\p{L}/gu) || [];
   if (letras.length < 6) return false;
@@ -376,7 +393,7 @@ export function restauradorDeNomes(nomes) {
 }
 
 export function enriquecerDescricao(descricao, a, { curta = DESCRICAO_CURTA, max = DESCRICAO_MAX, restaurarNomes = (t) => t } = {}) {
-  let t = decodificarEntidades(semHtml(descricao)).replace(/\r\n?/g, "\n").replace(RE_EMOJI, "");
+  let t = semMarcacao(decodificarEntidades(semHtml(descricao)).replace(/\r\n?/g, "\n").replace(RE_EMOJI, ""));
 
   // Contato fora do portal é proibido: sai a frase inteira que o contém.
   t = t
