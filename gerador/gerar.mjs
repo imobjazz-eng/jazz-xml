@@ -21,15 +21,19 @@
  *                   O resultado é gravado como antigo.json ao lado do XML
  *   VIDEO_PADRAO    vídeo do YouTube que entra em todo anúncio sem vídeo
  *                   próprio (do Vista ou da lista); "desligado" tira
+ *   TOURS360_DIR    pasta das fotos 360 enviadas pelos corretores
+ *                   (padrão tours360/ do repositório; ver tour360.mjs)
  *
  * Se qualquer trava disparar, sai com erro e NÃO grava nada: o arquivo
  * anterior continua no ar.
  */
 import { writeFile, mkdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { gerarFeed } from "./vista.mjs";
 import { enriquecerFeed, enderecosSemCoordenada, planilhaPendencias, linkYoutubeValido, notaEstimada, errosObrigatorios } from "./enriquecer.mjs";
 import { TOUR_BASE, TOUR_MIN_FOTOS, codigoDoTour, dadosDoTour, linkDoTour } from "./tour.mjs";
+import { TOUR360_BASE, lerTours360, linkDoTour360, publicarTours360 } from "./tour360.mjs";
 import { geocodificar, consultaCache } from "./geocodificar.mjs";
 import { ANTIGO_URL, extrairAntigo } from "./antigo.mjs";
 
@@ -128,6 +132,18 @@ try {
   // Enriquecimento com defeito não derruba o feed: publica o XML sem ele.
   let e;
   const tours = new Map();
+  // Tours 360 enviados pelos corretores (tours360/<código>/): têm preferência
+  // sobre o tour de fotos comuns. Falha aqui nunca segura o feed.
+  let tours360 = new Map();
+  try {
+    const lidos = await lerTours360(process.env.TOURS360_DIR || fileURLToPath(new URL("../tours360", import.meta.url)));
+    tours360 = lidos.tours;
+    for (const a of lidos.avisos) console.log(`::warning::${a}`);
+    if (tours360.size) console.log(`Tour 360: ${tours360.size} imóveis com fotos 360.`);
+  } catch (err) {
+    console.log(`::warning::Tours 360 não lidos: ${err.message}`);
+  }
+  const usados360 = new Map();
   try {
     const videos = await carregarVideos(process.env.VIDEOS_URL || VIDEOS_URL);
     if (videos.size) console.log(`Lista de vídeos: ${videos.size} links.`);
@@ -136,8 +152,13 @@ try {
     // um arquivo que existe.
     const baseTour = process.env.TOUR_BASE || TOUR_BASE;
     const minFotosTour = numero(process.env.TOUR_MIN_FOTOS, TOUR_MIN_FOTOS);
+    const base360 = process.env.TOUR360_BASE || TOUR360_BASE;
     const tourDe = baseTour === "desligado" ? () => null : (codigo, bloco) => {
       const c = codigoDoTour(codigo);
+      if (c && tours360.has(c)) {
+        usados360.set(c, tours360.get(c));
+        return linkDoTour360(c, base360);
+      }
       const d = c && dadosDoTour(bloco, minFotosTour);
       if (!d) return null;
       tours.set(c, d);
@@ -163,6 +184,7 @@ try {
     console.log(`::warning::Enriquecimento falhou, publicando sem ele: ${err.message}`);
     e = { xml: r.xml };
     tours.clear();
+    usados360.clear();
   }
 
   await mkdir(dirname(destino), { recursive: true });
@@ -174,6 +196,14 @@ try {
     await mkdir(pasta, { recursive: true });
     for (const [c, d] of tours) await writeFile(join(pasta, `${c}.json`), JSON.stringify(d));
     console.log(`Tour virtual: ${tours.size} anúncios com dados gravados.`);
+  }
+  if (usados360.size) {
+    try {
+      await publicarTours360(usados360, dirname(destino));
+    } catch (err) {
+      console.log(`::warning::Fotos do tour 360 não publicadas: ${err.message}`);
+    }
+    console.log(`Tour 360: ${usados360.size} anúncios com tour 360 publicado.`);
   }
   try {
     await writeFile(join(dirname(destino), "pendencias.csv"), planilhaPendencias(e.xml));

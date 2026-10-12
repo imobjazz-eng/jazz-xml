@@ -12,7 +12,8 @@
 # para o portal e coordenada para quem não tem, geocodificada no
 # OpenStreetMap com cache (geocode.json, publicado ao lado do XML), e tour
 # virtual com as fotos do anúncio (tour/, ver gerador/tour.mjs) para quem
-# não tem tour no Vista.
+# não tem tour no Vista. Tour 360 de verdade: o corretor sobe as fotos 360
+# em tours360/<código>/ e o tour sai na próxima geração (gerador/tour360.mjs).
 #
 # POR QUE AQUI. O XML era montado na Supabase e congelou em 20/09/2026 com a
 # restrição de cota da organização. Aqui não há banco no caminho, e
@@ -129,6 +130,9 @@ jobs:
           cp -r oportunidades site/oportunidades
           # Tour virtual: a página; os dados (tour/d/*.json) o gerador já gravou.
           mkdir -p site/tour && cp tour/index.html site/tour/index.html
+          # Tour 360: a página; fotos e dados (tour360/f, tour360/d) o gerador
+          # já gravou a partir de tours360/ (ver tours360/README.md).
+          mkdir -p site/tour360 && cp tour360/index.html site/tour360/index.html
           cd site
           touch .nojekyll
           cat > index.html <<HTML

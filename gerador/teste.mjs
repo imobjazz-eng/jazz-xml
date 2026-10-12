@@ -5,7 +5,7 @@
  * Rodar: node gerador/teste.mjs
  */
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, existsSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, existsSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,6 +16,7 @@ import { extrairAntigo } from "./antigo.mjs";
 import { dadosDaApi } from "./vista.mjs";
 import { ajustarPadrao, notaEstimada, errosObrigatorios, headerForaDeListings } from "./enriquecer.mjs";
 import { TOUR_BASE, codigoDoTour, fotosDoAnuncio, dadosDoTour, inserirTour, linkDoTour } from "./tour.mjs";
+import { tamanhoJpeg, eh360, nomeDoComodo, lerTours360, linkDoTour360, dadosDoTour360 } from "./tour360.mjs";
 
 const aqui = dirname(fileURLToPath(import.meta.url));
 let falhas = 0, total = 0;
@@ -187,6 +188,33 @@ console.log("tour.mjs — tour virtual com as fotos do anúncio");
   ok("feed: tour só em quem tem fotos suficientes", vf.resumo.tour === 1 && vf.xml.includes("?c=900") && !vf.xml.includes("?c=901"));
 }
 
+console.log("tour360.mjs — tour 360 com as fotos enviadas pelo corretor");
+// JPEG mínimo: só SOI, um APP0 qualquer e o SOF0 com altura e largura.
+const jpeg = (largura, altura) => Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x04, 0x00, 0x00,
+  0xff, 0xc0, 0x00, 0x11, 0x08, altura >> 8, altura & 255, largura >> 8, largura & 255, 0x03, ...new Array(9).fill(0), 0xff, 0xd9]);
+{
+  ok("lê o tamanho do JPEG", JSON.stringify(tamanhoJpeg(jpeg(8000, 4000))) === JSON.stringify({ altura: 4000, largura: 8000 }));
+  ok("não-JPEG: null", tamanhoJpeg(Buffer.from("PNG...")) === null);
+  ok("360 só na proporção 2:1", eh360({ largura: 8000, altura: 4000 }) && eh360({ largura: 5376, altura: 2688 }) && !eh360({ largura: 4000, altura: 3000 }) && !eh360({ largura: 9000, altura: 1500 }));
+  ok("nome do arquivo vira nome do cômodo", nomeDoComodo("2-sala_de_estar.jpg", 2) === "Sala de estar" && nomeDoComodo("03.jpg", 3) === "Ambiente 3" && nomeDoComodo("suite master.JPG", 1) === "Suite master");
+  const pasta = mkdtempSync(join(tmpdir(), "t360-"));
+  mkdirSync(join(pasta, "12345")); mkdirSync(join(pasta, "..x")); mkdirSync(join(pasta, "777"));
+  writeFileSync(join(pasta, "12345", "10-quarto.jpg"), jpeg(8000, 4000));
+  writeFileSync(join(pasta, "12345", "2-cozinha.jpg"), jpeg(8000, 4000));
+  writeFileSync(join(pasta, "12345", "1-sala.JPG"), jpeg(6000, 3000));
+  writeFileSync(join(pasta, "12345", "foto-comum.jpg"), jpeg(4000, 3000));
+  writeFileSync(join(pasta, "12345", "LEIA.txt"), "x");
+  writeFileSync(join(pasta, "777", "comum.jpg"), jpeg(4000, 3000));
+  const { tours, avisos } = await lerTours360(pasta);
+  const t = tours.get("12345");
+  ok("só fotos 360, na ordem numérica do nome", t && t.cenas.map((c) => c.nome).join(",") === "Sala,Cozinha,Quarto" && t.cenas[0].arquivo === "1.jpg", JSON.stringify(t));
+  ok("pasta sem foto 360 não vira tour", !tours.has("777") && tours.size === 1);
+  ok("avisa foto comum e pasta inválida", avisos.some((a) => a.includes("foto-comum.jpg")) && avisos.some((a) => a.includes("..x")), avisos.join(" | "));
+  ok("pasta tours360 ausente: vazio, sem erro", (await lerTours360(join(pasta, "nao-existe"))).tours.size === 0);
+  ok("link 360 em HTTPS no GitHub Pages", linkDoTour360("12345") === "https://imobjazz-eng.github.io/jazz-xml/tour360/?c=12345");
+  ok("dados da página: só nome e arquivo", JSON.stringify(dadosDoTour360(t).cenas[0]) === '{"f":"1.jpg","n":"Sala"}');
+}
+
 console.log("antigo.mjs e padrão VRSync (documentação do Grupo ZAP)");
 {
   const antigoXml = `<Listings><Listing><ListingID>900</ListingID><Location displayAddress="All"><Address>Rua A</Address><StreetNumber>230</StreetNumber><Latitude>-22.9</Latitude><Longitude>-47.0</Longitude></Location>
@@ -350,6 +378,18 @@ ok("planilha de pendências gravada ao lado", existsSync(join(dir, "a", "pendenc
   const yt = "https://www.youtube.com/watch?v=DlYDTuoHf3k";
   ok("vídeo padrão em todo anúncio", (x.match(/<Item medium="video">/g) || []).length === 120 && x.includes(`<Item medium="video">${yt}</Item>`));
   ok("TOUR_BASE=desligado: sem tour", existsSync(s5) && !readFileSync(s5, "utf8").includes("<VirtualTourLink>") && !existsSync(join(dir, "e", "tour")));
+}
+
+{
+  // Tour 360: pasta do corretor com uma foto 360 para o 10000.
+  const fotos = join(dir, "tours360");
+  mkdirSync(join(fotos, "10000"), { recursive: true });
+  writeFileSync(join(fotos, "10000", "1-sala.jpg"), jpeg(400, 200));
+  const s7 = join(dir, "g", "vrsync.xml");
+  rodar({ XML_FALSO: arquivo(feed(muitos)), CODIGOS_FALSOS: JSON.stringify(codigos), TOURS360_DIR: fotos }, s7);
+  const x7 = existsSync(s7) ? readFileSync(s7, "utf8") : "";
+  ok("tour 360 entra no anúncio no lugar do tour de fotos", x7.includes("tour360/?c=10000") && !x7.includes("jazz-xml/tour/?c=10000") && x7.includes("jazz-xml/tour/?c=10001"));
+  ok("tour 360: dados e foto publicados ao lado", existsSync(join(dir, "g", "tour360", "d", "10000.json")) && existsSync(join(dir, "g", "tour360", "f", "10000", "1.jpg")));
 }
 
 const s6 = join(dir, "f", "vrsync.xml");

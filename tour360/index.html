@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Tour 360°</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pannellum/2.5.6/pannellum.css">
+<style>
+  /* Página só com o tour (regra do Grupo ZAP para o VirtualTourLink):
+     fotos 360 do imóvel, cômodos em sequência, sem contato nem links. */
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #000; color: #fff; overflow: hidden;
+    font: 14px/1.3 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  #tour { position: fixed; inset: 0; }
+  #comodos { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; display: flex; gap: 6px; align-items: center;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); overflow-x: auto; scrollbar-width: none;
+    background: linear-gradient(transparent, rgba(0,0,0,.7)); }
+  #comodos button { appearance: none; border: 0; flex: none; cursor: pointer; color: #fff; background: rgba(0,0,0,.5);
+    padding: 9px 14px; border-radius: 20px; font: inherit; }
+  #comodos button[aria-current="true"] { background: #fff; color: #000; }
+  #comodos button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+  /* O nome do ambiente já aparece nos botões abaixo. */
+  .pnlm-panorama-info { display: none !important; }
+  #aviso { position: fixed; inset: 0; display: none; place-items: center; text-align: center; padding: 24px; color: rgba(255,255,255,.72); }
+  body.vazio #aviso { display: grid; }
+</style>
+</head>
+<body>
+<div id="tour" aria-label="Tour 360° do imóvel"></div>
+<nav id="comodos" aria-label="Ambientes"></nav>
+<div id="aviso">Tour indisponível no momento.</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pannellum/2.5.6/pannellum.js"></script>
+<script>
+(function () {
+  "use strict";
+  var codigo = new URLSearchParams(location.search).get("c") || "";
+  function vazio() { document.body.classList.add("vazio"); }
+  if (!/^[A-Za-z0-9_-]{1,40}$/.test(codigo) || !window.pannellum) return vazio();
+
+  fetch("d/" + codigo + ".json", { cache: "no-cache" })
+    .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(function (d) {
+      var cenas = (d && d.cenas) || [];
+      if (!cenas.length) return vazio();
+      var config = { default: { firstScene: "c0", autoLoad: true, autoRotate: -2, sceneFadeDuration: 900,
+        compass: false, showControls: true }, scenes: {} };
+      cenas.forEach(function (c, i) {
+        var proxima = cenas[i + 1] ? "c" + (i + 1) : null;
+        config.scenes["c" + i] = {
+          title: c.n, type: "equirectangular", panorama: "f/" + codigo + "/" + c.f, hfov: 100,
+          // "Próximo ambiente" à frente da vista inicial: o percurso segue sem
+          // ninguém marcar setas à mão.
+          hotSpots: proxima ? [{ pitch: -12, yaw: 0, type: "scene", text: "Próximo: " + cenas[i + 1].n, sceneId: proxima }] : []
+        };
+      });
+      var visor = pannellum.viewer("tour", config);
+      var nav = document.getElementById("comodos");
+      var botoes = cenas.map(function (c, i) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.textContent = c.n;
+        b.addEventListener("click", function () { visor.loadScene("c" + i); });
+        nav.appendChild(b);
+        return b;
+      });
+      function marcar() {
+        var atual = visor.getScene();
+        botoes.forEach(function (b, i) { b.setAttribute("aria-current", String("c" + i === atual)); });
+      }
+      visor.on("scenechange", function () { setTimeout(marcar, 0); });
+      marcar();
+      if (cenas.length < 2) nav.style.display = "none";
+    })
+    .catch(vazio);
+})();
+</script>
+</body>
+</html>
