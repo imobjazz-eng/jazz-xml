@@ -1,4 +1,4 @@
-# Gera o XML dos portais (VRSync: Canal Pró / Grupo ZAP) de hora em hora e
+# Gera o XML dos portais (VRSync: Canal Pró / Grupo ZAP) a cada 10 minutos e
 # publica no GitHub Pages:
 #
 #   https://imobjazz-eng.github.io/jazz-xml/vrsync.xml
@@ -27,7 +27,10 @@ name: Feed VRSync dos portais
 
 on:
   schedule:
-    - cron: "17 * * * *" # de hora em hora, fora do minuto cheio
+    # A cada 10 minutos (o GitHub Pages aceita até 10 publicações por hora):
+    # imóvel desativado no Vista sai do XML e reativado volta, quase em
+    # tempo real. O GitHub pode atrasar execuções agendadas em horário cheio.
+    - cron: "3-59/10 * * * *"
   workflow_dispatch: {}
   push:
     branches: [main]
@@ -100,7 +103,7 @@ jobs:
         env:
           ANTIGO_CACHE: cache/antigo.json
           GEOCODE_CACHE: cache/geocode.json
-          GEO_LIMITE: ${{ vars.GEO_LIMITE || '200' }}
+          GEO_LIMITE: ${{ vars.GEO_LIMITE || '35' }} # por execução; ~200 por hora
           VIDEOS_URL: ${{ vars.VIDEOS_URL }}
           VIDEO_PADRAO: ${{ vars.VIDEO_PADRAO }}
           VISTA_API_KEY: ${{ secrets.VISTA_API_KEY }}

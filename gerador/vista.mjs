@@ -80,40 +80,76 @@ export async function baixarAtivos({ chave, base, paralelo = 8 }) {
   return ativos;
 }
 
+// Campos da API usados para completar o que o XML de portais não traz.
+const CAMPOS_COMPLEMENTO = ["Codigo", "Numero", "Complemento", "AreaPrivativa", "BanheiroSocialQtd", "AnoConstrucao", "ValorIptu", "Bairro", "CEP", "Latitude", "Longitude"];
+const CAMPOS_ENDERECO = ["Codigo", "Numero", "Complemento"];
+
+/** Dados de um imóvel da API → formato usado pelo enriquecimento. */
+export function dadosDaApi(v) {
+  const e = {};
+  const texto = (x) => String(x ?? "").replace(/[<>\]\[]/g, "").replace(/\s+/g, " ").trim();
+  const num = (x) => Number(String(x ?? "").replace(",", "."));
+  const numero = texto(v.Numero);
+  if (/^\d{1,6}[A-Za-z]?$/.test(numero) && Number.parseInt(numero, 10) > 0) e.numero = numero;
+  const complemento = texto(v.Complemento).slice(0, 40);
+  if (complemento) e.complemento = complemento;
+  const area = num(v.AreaPrivativa);
+  if (area >= 1 && area < 1_000_000) e.area_util = Math.round(area);
+  const banheiros = num(v.BanheiroSocialQtd);
+  if (Number.isInteger(banheiros) && banheiros >= 1 && banheiros < 50) e.banheiros = banheiros;
+  const ano = num(v.AnoConstrucao);
+  if (Number.isInteger(ano) && ano >= 1800 && ano <= new Date().getFullYear() + 5) e.ano = ano;
+  const iptu = num(v.ValorIptu);
+  if (iptu > 1 && iptu < 10_000_000) e.iptu = Math.round(iptu);
+  const bairro = texto(v.Bairro).slice(0, 80);
+  if (bairro) e.bairro = bairro;
+  const cep = texto(v.CEP).replace(/\D/g, "");
+  if (/^\d{8}$/.test(cep) && cep !== "00000000") e.cep = `${cep.slice(0, 5)}-${cep.slice(5)}`;
+  const lat = num(v.Latitude);
+  const lon = num(v.Longitude);
+  if (lat && lon && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) { e.lat = lat; e.lon = lon; }
+  return e;
+}
+
+async function baixarPaginas(opcoes, paralelo) {
+  const primeira = await pagina(1, opcoes);
+  const paginas = Number(primeira.paginas);
+  if (!Number.isFinite(paginas) || paginas < 1) throw new Error("sem total de páginas");
+  const respostas = [primeira];
+  let proxima = 2;
+  const trabalhador = async () => {
+    while (proxima <= paginas) respostas.push(await pagina(proxima++, opcoes));
+  };
+  await Promise.all(Array.from({ length: Math.min(paralelo, Math.max(0, paginas - 1)) }, trabalhador));
+  return respostas;
+}
+
 /**
- * Número e complemento do endereço de cada imóvel, pela API (o XML de
- * portais do Vista não traz). Melhor esforço: qualquer falha devolve mapa
- * vazio e o feed segue com o que tiver (XML anterior).
+ * O que a API do Vista sabe e o XML de portais não traz (número, complemento,
+ * área útil, banheiros, ano, IPTU, bairro, CEP, coordenada). Melhor esforço:
+ * se a API recusar algum campo, tenta só número e complemento; qualquer
+ * falha devolve mapa vazio e o feed segue com o que tiver.
  */
 export async function baixarEnderecos({ chave, base, paralelo = 8 }) {
-  const enderecos = new Map();
-  if (!chave) return enderecos;
-  try {
-    const opcoes = { chave, base: (base || "https://rafaelak-rest.vistahost.com.br").replace(/\/+$/, ""), campos: ["Codigo", "Numero", "Complemento"] };
-    const primeira = await pagina(1, opcoes);
-    const paginas = Number(primeira.paginas);
-    if (!Number.isFinite(paginas) || paginas < 1) throw new Error("sem total de páginas");
-    const respostas = [primeira];
-    let proxima = 2;
-    const trabalhador = async () => {
-      while (proxima <= paginas) respostas.push(await pagina(proxima++, opcoes));
-    };
-    await Promise.all(Array.from({ length: Math.min(paralelo, Math.max(0, paginas - 1)) }, trabalhador));
-    for (const resp of respostas) {
-      for (const [k, v] of Object.entries(resp)) {
-        if (!/^\d+$/.test(k) || !v || typeof v !== "object") continue;
-        const numero = String(v.Numero ?? "").trim();
-        const complemento = String(v.Complemento ?? "").replace(/[<>\]\[]/g, "").replace(/\s+/g, " ").trim().slice(0, 40);
-        const e = {};
-        if (/^\d{1,6}[A-Za-z]?$/.test(numero) && Number.parseInt(numero, 10) > 0) e.numero = numero;
-        if (complemento) e.complemento = complemento;
-        if (Object.keys(e).length) enderecos.set(k, e);
+  const dados = new Map();
+  if (!chave) return dados;
+  const raiz = (base || "https://rafaelak-rest.vistahost.com.br").replace(/\/+$/, "");
+  for (const campos of [CAMPOS_COMPLEMENTO, CAMPOS_ENDERECO]) {
+    try {
+      const respostas = await baixarPaginas({ chave, base: raiz, campos }, paralelo);
+      for (const resp of respostas) {
+        for (const [k, v] of Object.entries(resp)) {
+          if (!/^\d+$/.test(k) || !v || typeof v !== "object") continue;
+          const e = dadosDaApi(v);
+          if (Object.keys(e).length) dados.set(k, e);
+        }
       }
+      return dados;
+    } catch (e) {
+      console.log(`API do Vista recusou os campos ${campos.join(",")} (${e.message}).`);
     }
-  } catch (e) {
-    console.log(`Número/complemento pela API indisponível (${e.message}): segue com o XML anterior.`);
   }
-  return enderecos;
+  return dados;
 }
 
 /**

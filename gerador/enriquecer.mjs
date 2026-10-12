@@ -530,7 +530,7 @@ function inserirNoFim(bloco, pai, xml) {
  * características; ano e IPTU sem dado ficam 2001 e 201, como no XML anterior.
  */
 export function ajustarPadrao(bloco, antigo = {}, { anoPadrao = 2001, iptuPadrao = 201 } = {}) {
-  const mudou = { pais: false, bairro: false, rua_visivel: false, numero: false, complemento: false, ano: false, iptu: false, area_util: false, caracteristicas: false, formato: false };
+  const mudou = { pais: false, cep: false, banheiros: false, bairro: false, rua_visivel: false, numero: false, complemento: false, ano: false, iptu: false, area_util: false, caracteristicas: false, formato: false };
   let b = bloco;
   const tipo = valor(b, "PropertyType") || "";
 
@@ -545,6 +545,18 @@ export function ajustarPadrao(bloco, antigo = {}, { anoPadrao = 2001, iptuPadrao
   if (/<Location displayAddress="Neighborhood"/.test(b) && valor(b, "Address")) {
     b = b.replace('<Location displayAddress="Neighborhood"', '<Location displayAddress="All"');
     mudou.rua_visivel = true;
+  }
+
+  // CEP é obrigatório; banheiros também, para quase todos os tipos.
+  if (/<Location[^>]*>/.test(b) && !valor(b, "PostalCode") && antigo.cep) {
+    const novo = `<PostalCode>${antigo.cep}</PostalCode>`;
+    b = elemento("PostalCode").test(b) ? b.replace(elemento("PostalCode"), novo) : inserirNoFim(b, "Location", novo);
+    mudou.cep = true;
+  }
+  if (/<Details>/.test(b) && !(Number(valor(b, "Bathrooms")) >= 1) && antigo.banheiros) {
+    const novo = `<Bathrooms>${antigo.banheiros}</Bathrooms>`;
+    b = elemento("Bathrooms").test(b) ? b.replace(elemento("Bathrooms"), novo) : inserirNoFim(b, "Details", novo);
+    mudou.banheiros = true;
   }
 
   // Bairro faz parte do formato mínimo do portal: sem ele, erro de importação.
@@ -676,10 +688,10 @@ export function errosObrigatorios(bloco, extra = {}) {
   const erros = [];
   if (!terreno && !(Number(valor(bloco, "LivingArea")) >= 1) && !extra.area_util) erros.push("área útil");
   if (terreno && !(Number(valor(bloco, "LotArea")) >= 1)) erros.push("área total do terreno");
-  if (!/Land Lot|Industrial|Building|Business|Warehouse|Agricultural|Edificio/.test(tipo) && !(Number(valor(bloco, "Bathrooms")) >= 1)) erros.push("banheiros");
+  if (!/Land Lot|Industrial|Building|Business|Warehouse|Agricultural|Edificio/.test(tipo) && !(Number(valor(bloco, "Bathrooms")) >= 1) && !extra.banheiros) erros.push("banheiros");
   if (/For Sale|Sale\/Rent/.test(transacao || "") && !(Number(valor(bloco, "ListPrice")) > 0)) erros.push("preço de venda");
   if (/For Rent|Sale\/Rent/.test(transacao || "") && !(Number(valor(bloco, "RentalPrice")) > 0)) erros.push("preço de aluguel");
-  if (!valor(bloco, "PostalCode")) erros.push("CEP");
+  if (!valor(bloco, "PostalCode") && !extra.cep) erros.push("CEP");
   if (!valor(bloco, "Neighborhood") && !extra.bairro) erros.push("bairro");
   return erros;
 }
@@ -796,7 +808,7 @@ export function enriquecerAnuncio(bloco, { coordenadaDe = () => null, videoDe = 
 /** Enriquece o feed inteiro. Cabeçalho, rodapé e ordem ficam como estão. */
 export function enriquecerFeed(xml, opcoes = {}) {
   const { cabecalho, blocos, rodape } = separar(xml);
-  const resumo = { titulo: 0, descricao: 0, ficha: 0, coordenada_adicionada: 0, coordenada_descartada: 0, uso: 0, video: 0, tour: 0, pais: 0, bairro: 0, rua_visivel: 0, numero: 0, complemento: 0, ano: 0, iptu: 0, area_util: 0, caracteristicas: 0, formato: 0, sem_coordenada: 0 };
+  const resumo = { titulo: 0, descricao: 0, ficha: 0, coordenada_adicionada: 0, coordenada_descartada: 0, uso: 0, video: 0, tour: 0, pais: 0, cep: 0, banheiros: 0, bairro: 0, rua_visivel: 0, numero: 0, complemento: 0, ano: 0, iptu: 0, area_util: 0, caracteristicas: 0, formato: 0, sem_coordenada: 0 };
   const nomes = blocos.flatMap((b) => [valor(b, "City"), valor(b, "Neighborhood")]);
   const restaurarNomes = restauradorDeNomes(nomes);
   const corpo = blocos.map((bloco) => {

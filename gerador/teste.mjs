@@ -13,6 +13,7 @@ import { ajustar, separar } from "./espelho.mjs";
 import { fichaDoImovel, enriquecerTitulo, enriquecerDescricao, enriquecerAnuncio, enriquecerFeed, enderecosSemCoordenada, chaveEndereco, lerAnuncio, usoDe, linkYoutubeValido, pendencias, planilhaPendencias } from "./enriquecer.mjs";
 import { escolherResultado, geocodificar, precisaConsultar, mesmaVia } from "./geocodificar.mjs";
 import { extrairAntigo } from "./antigo.mjs";
+import { dadosDaApi } from "./vista.mjs";
 import { ajustarPadrao, notaEstimada, errosObrigatorios, headerForaDeListings } from "./enriquecer.mjs";
 import { TOUR_BASE, codigoDoTour, fotosDoAnuncio, dadosDoTour, inserirTour, linkDoTour } from "./tour.mjs";
 
@@ -257,6 +258,13 @@ console.log("antigo.mjs e padrão VRSync (documentação do Grupo ZAP)");
   const cab = `<?xml version="1.0"?>\n<ListingDataFeed>\n  <Listings>\n    <Header>\n      <Provider>Vista</Provider>\n    </Header>\n    `;
   ok("Header sai de dentro de Listings (como na documentação)", headerForaDeListings(cab) === `<?xml version="1.0"?>\n<ListingDataFeed>\n  <Header>\n    <Provider>Vista</Provider>\n  </Header>\n  <Listings>\n    `, JSON.stringify(headerForaDeListings(cab)));
   ok("feed: Header antes de Listings e XML ainda separável", /<\/Header>\s*<Listings>/.test(enriquecerFeed(feed([["901", 8]])).xml) && separar(enriquecerFeed(feed([["901", 8]])).xml).blocos.length === 1);
+  const api = dadosDaApi({ Numero: "120", Complemento: "Apto 3 [B]", AreaPrivativa: "85,5", BanheiroSocialQtd: "2", AnoConstrucao: "2015", ValorIptu: "1200.40", Bairro: " Cambuí ", CEP: "13025000", Latitude: "-22.9", Longitude: "-47.05" });
+  ok("API do Vista: campos lidos e limpos", api.numero === "120" && api.complemento === "Apto 3 B" && api.area_util === 86 && api.banheiros === 2 && api.ano === 2015 && api.iptu === 1200 && api.bairro === "Cambuí" && api.cep === "13025-000" && api.lat === -22.9, JSON.stringify(api));
+  ok("API do Vista: lixo fica de fora", Object.keys(dadosDaApi({ Numero: "S/N", AreaPrivativa: "0", BanheiroSocialQtd: "0", AnoConstrucao: "0", ValorIptu: "0.01", CEP: "00000000", Latitude: "0", Longitude: "0" })).length === 0);
+  const comApi = ajustarPadrao(base, { ...ant["900"], ...api }).bloco;
+  ok("dados da API têm preferência sobre o XML anterior e o padrão", comApi.includes("<YearBuilt>2015</YearBuilt>") && comApi.includes('<Iptu currency="BRL" period="Yearly">1200</Iptu>') && comApi.includes("<StreetNumber>120</StreetNumber>") && comApi.includes('<LivingArea unit="square metres">86</LivingArea>'), comApi);
+  ok("banheiros, CEP e bairro da API entram", comApi.includes("<Bathrooms>2</Bathrooms>") && comApi.includes("<PostalCode>13025-000</PostalCode>") && comApi.includes("Cambuí"));
+  ok("com os dados da API o anúncio deixa de ser recusado", errosObrigatorios(base, api).length === 0, errosObrigatorios(base, api).join(","));
   const vf = enriquecerFeed(feed([["900", 8]]), { antigoDe: (c) => ant[c] ?? null });
   ok("feed: resumo conta o que veio do anterior", vf.resumo.iptu === 1 && vf.resumo.ano === 1 && vf.resumo.pais === 1, JSON.stringify(vf.resumo));
 }

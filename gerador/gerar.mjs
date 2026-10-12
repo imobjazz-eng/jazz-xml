@@ -94,8 +94,10 @@ try {
   const r = await gerarFeed({
     // Anúncio que o portal recusaria (obrigatório faltando) vai para o fim
     // da fila: no teto de 3000, entra no lugar dele um que o portal aceita.
-    prioridade: (codigo, bloco, enderecos) =>
-      errosObrigatorios(bloco, antigo[codigo] || {}).length ? -1 : notaEstimada(bloco, { numero: !!(enderecos.get(codigo)?.numero || antigo[codigo]?.numero) }),
+    prioridade: (codigo, bloco, enderecos) => {
+      const extra = { ...antigo[codigo], ...enderecos.get(codigo) };
+      return errosObrigatorios(bloco, extra).length ? -1 : notaEstimada(bloco, { numero: !!extra.numero });
+    },
     chave: process.env.VISTA_API_KEY,
     base: process.env.VISTA_API_URL,
     urlXml: process.env.VISTA_XML_URL || undefined,
@@ -148,8 +150,9 @@ try {
       const v = videos.get(c);
       return v && linkYoutubeValido(v) ? v : videoPadrao;
     };
-    // Número e complemento: a API do Vista primeiro, o XML anterior depois.
-    console.log(`Endereços pela API do Vista: ${r.enderecos?.size ?? 0} com número ou complemento.`);
+    // Dados da API do Vista (número, complemento, área, banheiros, ano, IPTU,
+    // bairro, CEP, coordenada) primeiro; o XML anterior completa o resto.
+    console.log(`Dados pela API do Vista: ${r.enderecos?.size ?? 0} imóveis.`);
     const antigoDe = (c) => {
       const api = r.enderecos?.get(c);
       return antigo[c] || api ? { ...antigo[c], ...api } : null;
