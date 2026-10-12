@@ -38,7 +38,19 @@
   .amarelo { color: var(--amarelo); } .selo.amarelo { background: var(--amarelo-fundo); }
   .vermelho { color: var(--vermelho); } .selo.vermelho { background: var(--vermelho-fundo); }
   .bola { width: 36px; height: 36px; border-radius: 50%; flex: none; background: currentColor; box-shadow: 0 0 0 6px color-mix(in srgb, currentColor 18%, transparent); }
-  .canais { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+  .canais { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .canais > .cartao { min-width: 0; }
+  /* Linha do portal: cada etapa é uma estação, da fonte (Vista) ao portal. */
+  .linha-portal { display: flex; align-items: flex-start; overflow-x: auto; padding: 12px 2px 4px; margin: 6px 0 2px; scrollbar-width: thin; }
+  .estacao { flex: 1 0 72px; min-width: 72px; display: flex; flex-direction: column; align-items: center; text-align: center; position: relative; }
+  .estacao::before { content: ""; position: absolute; top: 9px; left: -50%; width: 100%; height: 3px; background: var(--linha); z-index: 0; }
+  .estacao:first-child::before { display: none; }
+  .estacao .ponto { width: 20px; height: 20px; border-radius: 50%; position: relative; z-index: 1; border: 3px solid var(--cartao); box-sizing: content-box; }
+  .estacao.verde .ponto { background: var(--verde); } .estacao.amarelo .ponto { background: var(--amarelo); } .estacao.vermelho .ponto { background: var(--vermelho); }
+  .estacao .rot { font-size: 11px; line-height: 1.25; color: var(--suave); margin-top: 6px; padding: 0 2px; }
+  .estacao.amarelo .rot, .estacao.vermelho .rot { color: var(--texto); font-weight: 600; }
+  .pendencias { margin: 8px 0 0; padding-left: 18px; font-size: 13px; color: var(--suave); }
+  .pendencias b { color: var(--texto); font-weight: 600; }
   .cartao { background: var(--cartao); border: 1px solid var(--linha); border-radius: 12px; padding: 14px 16px; }
   .cartao h3 { font-size: 16px; margin: 0 0 6px; display: flex; justify-content: space-between; gap: 8px; align-items: start; }
   .cartao p { margin: 4px 0; color: var(--suave); font-size: 13px; }
@@ -53,6 +65,8 @@
   .detalhe { font-size: 12px; color: var(--suave); }
   ul.avisos { margin: 0; padding: 12px 16px 12px 32px; background: var(--cartao); border: 1px solid var(--linha); border-radius: 12px; font-size: 13px; }
   .legenda { display: flex; gap: 8px; flex-wrap: wrap; font-size: 12px; color: var(--suave); margin-top: 10px; }
+  details summary { cursor: pointer; margin: 28px 0 10px; color: var(--suave); }
+  details summary h2 { margin: 0; }
   #erro { display: none; }
   body.falhou #erro { display: block; } body.falhou #conteudo { display: none; }
   @media (max-width: 520px) { ol.etapas li { grid-template-columns: 28px 1fr; } ol.etapas li .selo { grid-column: 2; justify-self: start; } }
@@ -71,11 +85,11 @@
   <div id="conteudo">
     <div class="geral" id="geral"><div class="bola"></div><div><strong id="geral-texto"></strong><span class="sub" id="geral-sub"></span></div></div>
 
-    <h2>Canais</h2>
+    <h2>Linha de cada portal</h2>
     <div class="canais" id="canais"></div>
 
-    <h2>Etapas do processo</h2>
-    <ol class="etapas" id="etapas"></ol>
+    <details id="detalhe"><summary><h2 style="display:inline">Detalhe das etapas</h2></summary>
+    <ol class="etapas" id="etapas"></ol></details>
 
     <div id="bloco-avisos"><h2>Avisos da última geração</h2><ul class="avisos" id="avisos"></ul></div>
 
@@ -113,14 +127,36 @@
     var problemas = etapas.filter(function (e) { return e.status !== "verde"; }).map(function (e) { return e.nome; });
     $("geral-sub").textContent = problemas.length ? "Atenção: " + problemas.join(", ") + "." : "Todas as etapas e canais estão verdes.";
 
+    // Uma linha por portal: Vista → enriquecimento → arquivo → portal.
+    var CURTO = { vista: "Vista", api: "Ativos", selecao: "Seleção", enriquecimento: "Enriquecimento", endereco: "Endereço",
+      descricao: "Descrição", fotos: "Fotos", video: "Vídeo", tour: "Tour", publicacao: "Publicação" };
     var canais = $("canais"); canais.innerHTML = "";
     s.canais.forEach(function (c) {
-      var st = pior(c.status, pub);
+      var estacoes = etapas.filter(function (e) { return e.id !== "publicacao"; }).map(function (e) {
+        return { rot: CURTO[e.id] || e.nome, status: e.status, nome: e.nome, resumo: e.resumo };
+      }).concat([
+        { rot: "Arquivo", status: c.statusArquivo || c.status, nome: "Arquivo " + c.arquivo, resumo: c.resumo },
+        { rot: "Publicação", status: pub, nome: "Publicação", resumo: "Última geração " + tempo(min) },
+        { rot: "Portal", status: c.ativacao ? c.ativacao.status : "verde", nome: "Portal", resumo: c.ativacao ? c.ativacao.texto : c.leitura },
+      ]);
+      var st = estacoes.reduce(function (a, e) { return pior(a, e.status); }, "verde");
       var card = el("div", "cartao");
       var h = el("h3"); h.appendChild(el("span", null, c.nome)); h.appendChild(selo(st)); card.appendChild(h);
-      card.appendChild(el("p", "num", c.resumo));
-      var p = el("p"); var a = el("a", null, BASE + c.arquivo); a.href = BASE + c.arquivo; p.appendChild(a); card.appendChild(p);
-      card.appendChild(el("p", null, c.leitura));
+      var linha = el("div", "linha-portal"); linha.setAttribute("role", "list");
+      estacoes.forEach(function (e) {
+        var est = el("div", "estacao " + e.status); est.setAttribute("role", "listitem");
+        est.title = e.nome + ": " + e.resumo; est.setAttribute("aria-label", e.nome + ", " + ROTULO[e.status] + ": " + e.resumo);
+        est.appendChild(el("span", "ponto")); est.appendChild(el("span", "rot", e.rot)); linha.appendChild(est);
+      });
+      card.appendChild(linha);
+      var pend = estacoes.filter(function (e) { return e.status !== "verde"; });
+      if (pend.length) {
+        var ul = el("ul", "pendencias");
+        pend.forEach(function (e) { var li = el("li"); li.appendChild(el("b", null, e.rot + ": ")); li.appendChild(document.createTextNode(e.resumo)); ul.appendChild(li); });
+        card.appendChild(ul);
+      }
+      var p = el("p"); p.appendChild(document.createTextNode(c.resumo + " · ")); var a = el("a", null, c.arquivo); a.href = BASE + c.arquivo; p.appendChild(a);
+      p.appendChild(document.createTextNode(" · " + c.leitura)); card.appendChild(p);
       canais.appendChild(card);
     });
 

@@ -40,6 +40,7 @@ import { TOUR360_BASE, lerTours360, linkDoTour360, publicarTours360, carregarTou
 import { geocodificar, consultaCache } from "./geocodificar.mjs";
 import { ANTIGO_URL, extrairAntigo } from "./antigo.mjs";
 import { paraChavesNaMao } from "./chavesnamao.mjs";
+import { paraImovelWeb } from "./imovelweb.mjs";
 import { montarSaude } from "./saude.mjs";
 
 const destino = process.argv[2] || "saida/vrsync.xml";
@@ -120,7 +121,7 @@ try {
   // Painel de saúde (saude.json → saude.html): avisos desta execução.
   const avisos = [...r.avisos];
   const aviso = (a) => { avisos.push(a); console.log(`::warning::${a}`); };
-  let enriquecimentoOk = true, tours360Ok = true, totalChavesNaMao = null;
+  let enriquecimentoOk = true, tours360Ok = true, totalChavesNaMao = null, imovelWeb = null;
 
   // Geocodificação: erro aqui nunca impede a publicação.
   let cache = {};
@@ -237,6 +238,18 @@ try {
   } catch (err) {
     aviso(`XML do Chaves na Mão não gerado: ${err.message}`);
   }
+  // ImovelWeb (OpenNavent): idem. Sem o código da imobiliária no portal
+  // (IMOVELWEB_CODIGO), o arquivo sai, mas o portal não aceita a carga.
+  try {
+    const codigo = process.env.IMOVELWEB_CODIGO || "";
+    const iw = paraImovelWeb(e.xml, { codigoImobiliaria: codigo });
+    await writeFile(join(dirname(destino), "imovelweb.xml"), iw.xml);
+    imovelWeb = { total: iw.total, fora: iw.fora, temCodigo: !!codigo };
+    console.log(`ImovelWeb: ${iw.total} imóveis em imovelweb.xml (${iw.fora} sem campo obrigatório do portal).`);
+    if (!codigo) console.log("ImovelWeb: falta IMOVELWEB_CODIGO (código da Jazz no portal).");
+  } catch (err) {
+    aviso(`XML do ImovelWeb não gerado: ${err.message}`);
+  }
   try {
     await writeFile(join(dirname(destino), "pendencias.csv"), planilhaPendencias(e.xml));
   } catch (err) {
@@ -245,7 +258,7 @@ try {
   try {
     const saude = montarSaude(e.xml, {
       noArquivo: r.noArquivo, ativosNaApi: r.ativosNaApi, excluidos: r.excluidos, avisos, geoErro: geo.erro || "",
-      enriquecimentoOk, tours360Ok, chavesNaMao: totalChavesNaMao, commit: (process.env.GITHUB_SHA || "").slice(0, 7),
+      enriquecimentoOk, tours360Ok, chavesNaMao: totalChavesNaMao, imovelWeb, commit: (process.env.GITHUB_SHA || "").slice(0, 7),
       minimo: numero(process.env.FEED_MINIMO, 1000), maximo: numero(process.env.FEED_MAXIMO, 3000),
     });
     await writeFile(join(dirname(destino), "saude.json"), JSON.stringify(saude, null, 1));
