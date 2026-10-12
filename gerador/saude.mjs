@@ -9,6 +9,8 @@
  */
 
 export const FOTOS_PORTAL = 16;
+/** Portais com a integração já ativada (o Chaves na Mão ainda depende de pedido ao portal). */
+export const PORTAIS_ATIVOS = ["zap"];
 
 const pct = (n, total) => (total ? Math.round((n / total) * 1000) / 10 : 0);
 const pior = (...s) => (s.includes("vermelho") ? "vermelho" : s.includes("amarelo") ? "amarelo" : "verde");
@@ -88,18 +90,24 @@ export function montarSaude(xml, info = {}) {
   if (info.tours360Ok === false) etapas[etapas.length - 1].status = pior(etapas[etapas.length - 1].status, "amarelo");
 
   const statusEtapas = pior(...etapas.map((e) => e.status));
+  // Ativação no portal não é detectável daqui: marcada à mão (PORTAIS_ATIVOS).
+  const ativos = info.portaisAtivos ?? PORTAIS_ATIVOS;
+  const arquivoZap = n >= (info.minimo ?? 1000) ? "verde" : "vermelho";
+  const arquivoCnm = info.chavesNaMao == null ? "vermelho" : info.chavesNaMao >= n * 0.95 ? "verde" : "amarelo";
+  const canal = (id, nome, arquivo, statusArquivo, resumo, leitura) => {
+    const ativo = ativos.includes(id);
+    const ativacao = { status: ativo ? "verde" : "amarelo", texto: ativo ? "Integração ativa no portal" : "Aguardando ativação no portal" };
+    return { id, nome, arquivo, statusArquivo, resumo, leitura, ativacao, status: pior(statusEtapas, statusArquivo, ativacao.status) };
+  };
+  const iw = info.imovelWeb;
+  const arquivoIw = !iw ? "vermelho" : !iw.temCodigo ? "amarelo" : iw.total >= n * 0.9 ? "verde" : "amarelo";
   const canais = [
-    {
-      id: "zap", nome: "Grupo ZAP (ZAP Imóveis, VivaReal, OLX)", arquivo: "vrsync.xml",
-      status: pior(statusEtapas, n >= (info.minimo ?? 1000) ? "verde" : "vermelho"),
-      resumo: `${n} anúncios · ${m.megabytes} MB`, leitura: "O portal lê várias vezes ao dia.",
-    },
-    {
-      id: "chavesnamao", nome: "Chaves na Mão", arquivo: "chavesnamao.xml",
-      status: info.chavesNaMao == null ? "vermelho" : pior(statusEtapas, info.chavesNaMao >= n * 0.95 ? "verde" : "amarelo"),
-      resumo: info.chavesNaMao == null ? "Arquivo não gerado nesta execução" : `${info.chavesNaMao} imóveis`,
-      leitura: "O portal lê uma vez por dia (depois de ativado no portal).",
-    },
+    canal("zap", "Grupo ZAP (ZAP Imóveis, VivaReal, OLX)", "vrsync.xml", arquivoZap, `${n} anúncios · ${m.megabytes} MB`, "O portal lê várias vezes ao dia."),
+    canal("chavesnamao", "Chaves na Mão", "chavesnamao.xml", arquivoCnm,
+      info.chavesNaMao == null ? "Arquivo não gerado nesta execução" : `${info.chavesNaMao} imóveis`, "O portal lê uma vez por dia."),
+    canal("imovelweb", "ImovelWeb (Wimoveis, Casa Mineira)", "imovelweb.xml", arquivoIw,
+      !iw ? "Arquivo não gerado nesta execução" : `${iw.total} imóveis${iw.fora ? ` · ${iw.fora} sem campo obrigatório do portal` : ""}${iw.temCodigo ? "" : " · falta o código da Jazz no portal"}`,
+      "O portal lê uma vez por dia."),
   ];
   return { geradoEm: (info.agora || new Date()).toISOString(), commit: info.commit || "", geral: pior(...canais.map((c) => c.status)), etapas, canais, avisos: (info.avisos || []).slice(0, 20), numeros: m };
 }

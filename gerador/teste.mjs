@@ -15,6 +15,7 @@ import { escolherResultado, geocodificar, precisaConsultar, mesmaVia } from "./g
 import { extrairAntigo } from "./antigo.mjs";
 import { paraChavesNaMao, imovelChavesNaMao } from "./chavesnamao.mjs";
 import { montarSaude } from "./saude.mjs";
+import { paraImovelWeb, imovelImovelWeb } from "./imovelweb.mjs";
 import { dadosDaApi } from "./vista.mjs";
 import { ajustarPadrao, notaEstimada, errosObrigatorios, headerForaDeListings } from "./enriquecer.mjs";
 import { TOUR_BASE, codigoDoTour, fotosDoAnuncio, dadosDoTour, inserirTour, linkDoTour } from "./tour.mjs";
@@ -265,13 +266,33 @@ console.log("chavesnamao.mjs — XML do Chaves na Mão a partir do VRSync enriqu
   ok("todas as 53 tags presentes; sem preço fica de fora", r.total === 1 && tags.length === 53 && r.xml.includes("<titulo><![CDATA[Casa & quintal]]></titulo>"), `${r.total} imóveis, ${tags.length} tags`);
 }
 
+console.log("imovelweb.mjs — OpenNavent a partir do VRSync enriquecido");
+{
+  const base = (tipo, extra = "") => `<Listing><ListingID>800</ListingID><Title><![CDATA[Casa ampla com piscina, churrasqueira e quintal em condomínio fechado no Centro de Atibaia]]></Title>
+    <TransactionType>Sale/Rent</TransactionType><Details><PropertyType>${tipo}</PropertyType><Description><![CDATA[Texto]]></Description>
+    <ListPrice currency="BRL">500000</ListPrice><RentalPrice currency="BRL">2500</RentalPrice><LivingArea unit="square metres">120</LivingArea>
+    <YearBuilt>2001</YearBuilt><Iptu currency="BRL" period="Yearly">201</Iptu>${extra}<Features><Feature>Pool</Feature><Feature>Balcony</Feature></Features></Details>
+    <Location displayAddress="All"><Address>Rua A, B</Address><StreetNumber>12</StreetNumber><Complement>ap 3</Complement><City><![CDATA[Atibaia]]></City>
+    <Neighborhood><![CDATA[Centro]]></Neighborhood><PostalCode>12940-000</PostalCode><State abbreviation="SP">São Paulo</State></Location>
+    <Media><Item medium="image">https://f/1.jpg</Item><Item medium="video">https://www.youtube.com/watch?v=DlYDTuoHf3k</Item></Media></Listing>`;
+  const d = imovelImovelWeb(base("Residential / Home"), { ano: 2026 });
+  ok("tipo, venda e aluguel, idade", d.idTipo === "1" && d.idSubTipo === "5" && d.precos.map((p) => p[0]).join() === "VENTA,ALQUILER" && d.caracteristicas.some((c) => c.id === "CFT5" && c.valor === 25));
+  ok("localidade Bairro,Cidade,Estado,Brasil e endereço com número", d.localidade === "Centro,Atibaia,São Paulo,Brasil" && d.endereco === "Rua A, B, 12 - ap 3", d.localidade + " | " + d.endereco);
+  ok("título até 80 em palavra inteira; vídeo pelo código", d.titulo.length <= 80 && !/\s$/.test(d.titulo) && d.video === "DlYDTuoHf3k", d.titulo);
+  ok("casa: piscina e varanda privativas", d.caracteristicas.some((c) => c.id === "20140") && d.caracteristicas.some((c) => c.id === "20199"));
+  ok("apartamento sem condomínio fica de fora; com condomínio, piscina comum", imovelImovelWeb(base("Residential / Apartment")) === null
+    && imovelImovelWeb(base("Residential / Apartment", '<PropertyAdministrationFee currency="BRL">400</PropertyAdministrationFee>')).caracteristicas.some((c) => c.id === "30025"));
+  const r = paraImovelWeb(`<Listings>${base("Residential / Home")}</Listings>`, { codigoImobiliaria: "J1", agora: new Date(1700000000000) });
+  ok("arquivo OpenNavent com dataModificacao em ms e código da imobiliária", r.total === 1 && r.xml.includes("<dataModificacao><![CDATA[1700000000000]]></dataModificacao>") && r.xml.includes("<codigoImobiliaria><![CDATA[J1]]></codigoImobiliaria>"));
+}
+
 console.log("saude.mjs — painel de saúde dos XMLs");
 {
   const xml = feed(Array.from({ length: 10 }, (_, i) => [String(600 + i), i < 3 ? 8 : 20]));
   const s = montarSaude(xml, { noArquivo: 12, ativosNaApi: 10, excluidos: {}, maximo: 10, minimo: 5, chavesNaMao: 10, agora: new Date("2026-10-12T12:00:00Z") });
   const st = Object.fromEntries(s.etapas.map((e) => [e.id, e.status]));
   ok("etapas com verde/amarelo/vermelho", st.vista === "verde" && st.api === "verde" && st.selecao === "verde" && st.fotos === "vermelho" && st.video === "vermelho", JSON.stringify(st));
-  ok("geral é o pior dos canais; os dois canais presentes", s.geral === "vermelho" && s.canais.map((c) => c.id).join() === "zap,chavesnamao" && s.geradoEm === "2026-10-12T12:00:00.000Z");
+  ok("geral é o pior dos canais; os dois canais presentes", s.geral === "vermelho" && s.canais.map((c) => c.id).join() === "zap,chavesnamao,imovelweb" && s.geradoEm === "2026-10-12T12:00:00.000Z");
   const s2 = montarSaude(xml, { noArquivo: 12, ativosNaApi: null, enriquecimentoOk: false, chavesNaMao: null, maximo: 10 });
   const st2 = Object.fromEntries(s2.etapas.map((e) => [e.id, e.status]));
   ok("API fora: amarelo; enriquecimento falho e Chaves na Mão ausente: vermelho", st2.api === "amarelo" && st2.enriquecimento === "vermelho" && s2.canais[1].status === "vermelho");
@@ -430,6 +451,8 @@ ok("gravou os 120", existsSync(s1) && ids(readFileSync(s1, "utf8")).length === 1
 ok("gravou o cache de geocodificação ao lado", existsSync(join(dir, "a", "geocode.json")));
 ok("título enriquecido no arquivo final", readFileSync(s1, "utf8").includes("<Title><![CDATA["));
 ok("planilha de pendências gravada ao lado", existsSync(join(dir, "a", "pendencias.csv")));
+ok("chavesnamao.xml, imovelweb.xml e saude.json gravados ao lado", ["chavesnamao.xml", "imovelweb.xml", "saude.json"].every((f) => existsSync(join(dir, "a", f)))
+  && JSON.parse(readFileSync(join(dir, "a", "saude.json"), "utf8")).numeros.anuncios === 120);
 {
   const x = readFileSync(s1, "utf8");
   const links = [...x.matchAll(/<VirtualTourLink>([^<]+)<\/VirtualTourLink>/g)].map((m) => m[1]);
