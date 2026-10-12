@@ -28,12 +28,12 @@ export const PORTAIS = [
   { nome: "Chaves na Mão", grupo: "", audiencia: "~9,8 mi visitas/mês · 3º", formato: "Próprio (CNM)", doc: "verde", vista: true, canal: "chavesnamao", prioridade: "Alta", motivo: "3º em audiência; arquivo pronto" },
   { nome: "ImovelWeb", grupo: "Navent / QuintoAndar", audiencia: "~6,7 mi visitas/mês", formato: "OpenNavent", doc: "amarelo", vista: true, canal: "imovelweb", prioridade: "Alta", motivo: "Nacional, forte em SP; porta de entrada para o QuintoAndar" },
   { nome: "Mercado Livre Imóveis", grupo: "Mercado Livre", audiencia: "generalista (160 mi, varejo inteiro)", formato: "API (não XML)", doc: "verde", vista: true, canal: null, prioridade: "Média", motivo: "Alcance enorme; exige integração por API" },
-  { nome: "123i", grupo: "", audiencia: "sem dado", formato: "Próprio (não publicado)", doc: "vermelho", vista: true, canal: null, prioridade: "Média", motivo: "Integrado ao Vista; pedir o manual ao portal" },
+  { nome: "123i", grupo: "", audiencia: "sem dado", formato: "Não publicado (integradores citam o modelo VivaReal)", doc: "vermelho", vista: true, canal: null, prioridade: "Média", motivo: "Integrado ao Vista; confirmar com o portal se aceita o vrsync.xml" },
   { nome: "Wimoveis", grupo: "Navent / QuintoAndar", audiencia: "~1,3 mi visitas/mês", formato: "OpenNavent (mesmo arquivo do ImovelWeb)", doc: "amarelo", vista: false, canal: "imovelweb", prioridade: "Fora da região", motivo: "Foco no Distrito Federal" },
   { nome: "Casa Mineira", grupo: "QuintoAndar", audiencia: "top 10 de concorrentes do ZAP", formato: "OpenNavent (mesmo arquivo do ImovelWeb)", doc: "amarelo", vista: true, canal: "imovelweb", prioridade: "Fora da região", motivo: "Foco em Minas Gerais" },
-  { nome: "DF Imóveis", grupo: "", audiencia: "~1,3 mi visitas/mês", formato: "Não publicado (aprovação manual)", doc: "vermelho", vista: false, canal: null, prioridade: "Fora da região", motivo: "Só Distrito Federal" },
+  { nome: "DF Imóveis", grupo: "", audiencia: "~1,3 mi visitas/mês", formato: "Formato ZAP (VRSync, segundo integradores; aprovação manual)", doc: "amarelo", vista: false, canal: "zap", prioridade: "Fora da região", motivo: "Só Distrito Federal; aceitaria o vrsync.xml" },
   { nome: "Netimóveis", grupo: "", audiencia: "~390 mil visitas/mês", formato: "Não encontrado", doc: "vermelho", vista: false, canal: null, prioridade: "Fora da região", motivo: "Foco em MG e RJ" },
-  { nome: "Imóveis SC", grupo: "", audiencia: "sem dado recente", formato: "Próprio (manual de 2017)", doc: "amarelo", vista: false, canal: null, prioridade: "Fora da região", motivo: "Só Santa Catarina" },
+  { nome: "Imóveis SC", grupo: "", audiencia: "sem dado recente", formato: "Próprio (manual de 2017, fora do ar)", doc: "vermelho", vista: false, canal: null, prioridade: "Fora da região", motivo: "Só Santa Catarina" },
 ];
 
 const pct = (n, total) => (total ? Math.round((n / total) * 1000) / 10 : 0);
