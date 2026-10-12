@@ -39,6 +39,7 @@ import { TOUR_BASE, TOUR_MIN_FOTOS, codigoDoTour, dadosDoTour, linkDoTour } from
 import { TOUR360_BASE, lerTours360, linkDoTour360, publicarTours360, carregarToursRemotos } from "./tour360.mjs";
 import { geocodificar, consultaCache } from "./geocodificar.mjs";
 import { ANTIGO_URL, extrairAntigo } from "./antigo.mjs";
+import { paraChavesNaMao } from "./chavesnamao.mjs";
 
 const destino = process.argv[2] || "saida/vrsync.xml";
 const VIDEOS_URL = "https://raw.githubusercontent.com/imobjazz-eng/jazz-videos/main/videos.json";
@@ -218,6 +219,15 @@ try {
       console.log(`::warning::Fotos do tour 360 não publicadas: ${err.message}`);
     }
     console.log(`Tour 360: ${usados360.size} anúncios com tour 360 publicado.`);
+  }
+  // Chaves na Mão: mesmo XML enriquecido, no formato do portal. Falha aqui
+  // não segura o XML do Grupo ZAP.
+  try {
+    const cnm = paraChavesNaMao(e.xml);
+    await writeFile(join(dirname(destino), "chavesnamao.xml"), cnm.xml);
+    console.log(`Chaves na Mão: ${cnm.total} imóveis em chavesnamao.xml.`);
+  } catch (err) {
+    console.log(`::warning::XML do Chaves na Mão não gerado: ${err.message}`);
   }
   try {
     await writeFile(join(dirname(destino), "pendencias.csv"), planilhaPendencias(e.xml));

@@ -13,6 +13,7 @@ import { ajustar, separar } from "./espelho.mjs";
 import { fichaDoImovel, enriquecerTitulo, enriquecerDescricao, enriquecerAnuncio, enriquecerFeed, enderecosSemCoordenada, chaveEndereco, lerAnuncio, usoDe, linkYoutubeValido, pendencias, planilhaPendencias } from "./enriquecer.mjs";
 import { escolherResultado, geocodificar, precisaConsultar, mesmaVia } from "./geocodificar.mjs";
 import { extrairAntigo } from "./antigo.mjs";
+import { paraChavesNaMao, imovelChavesNaMao } from "./chavesnamao.mjs";
 import { dadosDaApi } from "./vista.mjs";
 import { ajustarPadrao, notaEstimada, errosObrigatorios, headerForaDeListings } from "./enriquecer.mjs";
 import { TOUR_BASE, codigoDoTour, fotosDoAnuncio, dadosDoTour, inserirTour, linkDoTour } from "./tour.mjs";
@@ -238,6 +239,29 @@ const jpeg = (largura, altura) => Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x0
   ok("já publicada: copia do cache, sem baixar de novo", baixadas === 0 && existsSync(join(site2, "tour360", "f", "500", "1.jpg")));
   const falhas = await publicarTours360(remotos, mkdtempSync(join(tmpdir(), "s360-")), { baixar: async () => ({ ok: false, status: 404 }) });
   ok("foto que sumiu: falha avisada, sem derrubar", falhas.length === 1 && falhas[0].includes("404"), falhas.join());
+}
+
+console.log("chavesnamao.mjs — XML do Chaves na Mão a partir do VRSync enriquecido");
+{
+  const vr = `<Listing><ListingID>700</ListingID><Title><![CDATA[Casa & quintal]]></Title><TransactionType>Sale/Rent</TransactionType>
+    <Details><PropertyType>Residential / Land Lot</PropertyType><Description><![CDATA[Texto]]></Description><ListPrice currency="BRL">500000</ListPrice>
+    <RentalPrice currency="BRL" period="Monthly">2500</RentalPrice><PropertyAdministrationFee currency="BRL">300</PropertyAdministrationFee>
+    <Iptu currency="BRL" period="Yearly">201</Iptu><LotArea unit="square metres">360</LotArea>
+    <Features><Feature>Pool</Feature><Feature>Balcony</Feature><Feature>Inexistente</Feature></Features></Details>
+    <Location displayAddress="All"><Address>Rua A</Address><StreetNumber>12</StreetNumber><City><![CDATA[Atibaia]]></City>
+    <Neighborhood><![CDATA[Centro]]></Neighborhood><PostalCode>12940-000</PostalCode><State abbreviation="SP">São Paulo</State></Location>
+    <VirtualTourLink>https://imobjazz-eng.github.io/jazz-xml/tour/?c=700</VirtualTourLink>
+    <Media>${Array.from({ length: 35 }, (_, i) => `<Item medium="image"${i === 3 ? ' primary="true"' : ""}>https://f/${i}.jpg</Item>`).join("")}<Item medium="video">https://www.youtube.com/watch?v=DlYDTuoHf3k</Item></Media></Listing>`;
+  const c = imovelChavesNaMao(vr);
+  ok("venda e aluguel: V + L, valores e período", c.transacao === "V" && c.transacao2 === "L" && c.valor === "500000" && c.valor_locacao === "2500" && c.periodo_locacao === "1");
+  ok("terreno com condomínio vira 'Terreno em Condomínio'", c.finalidade === "RE" && c.tipo === "Terreno em Condomínio", c.tipo);
+  ok("características só da lista do portal (condomínio → área comum)", JSON.stringify(c.area_comum) === '["Piscina"]' && JSON.stringify(c.area_privativa) === '["Sacada"]' && c.varanda === "1");
+  ok("até 30 fotos, capa primeiro", c.fotos.length === 30 && c.fotos[0] === "https://f/3.jpg");
+  ok("tour de fotos comuns não vai como tour_360; vídeo vai", c.tour_360 === "" && c.video.includes("DlYDTuoHf3k"));
+  ok("endereço completo, CEP só números", c.endereco === "Rua A" && c.numero === "12" && c.cep === "12940000" && c.estado === "SP" && c.esconder_endereco_imovel === "0");
+  const r = paraChavesNaMao(`<Listings>${vr}${vr.replace("<ListingID>700", "<ListingID>701").replace(/<ListPrice[^<]*<\/ListPrice>/, "").replace("Sale/Rent", "For Sale")}</Listings>`);
+  const tags = (r.xml.match(/<imovel>[\s\S]*?<\/imovel>/) || [""])[0].match(/^ {6}<(\w+)/gm) || [];
+  ok("todas as 53 tags presentes; sem preço fica de fora", r.total === 1 && tags.length === 53 && r.xml.includes("<titulo><![CDATA[Casa & quintal]]></titulo>"), `${r.total} imóveis, ${tags.length} tags`);
 }
 
 console.log("antigo.mjs e padrão VRSync (documentação do Grupo ZAP)");
