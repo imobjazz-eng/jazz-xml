@@ -78,6 +78,10 @@
   .cel::before { content: ""; width: 10px; height: 10px; border-radius: 50%; margin-top: 4px; flex: none; background: var(--linha); }
   .cel.verde::before { background: var(--verde); } .cel.amarelo::before { background: var(--amarelo); } .cel.vermelho::before { background: var(--vermelho); }
   .cel.cinza { color: var(--suave); }
+  table.portais td.prio small { display: block; color: var(--suave); font-size: 12px; min-width: 150px; }
+  .prio-alta, .prio-média, .prio-fora { font-weight: 700; font-size: 12px; }
+  .prio-alta { color: var(--verde); } .prio-média { color: var(--amarelo); } .prio-fora { color: var(--suave); }
+  table.portais tr.fora td { opacity: .7; }
   #erro { display: none; }
   body.falhou #erro { display: block; } body.falhou #conteudo { display: none; }
   @media (max-width: 520px) { ol.etapas li { grid-template-columns: 28px 1fr; } ol.etapas li .selo { grid-column: 2; justify-self: start; } }
@@ -96,12 +100,13 @@
   <div id="conteudo">
     <div class="geral" id="geral"><div class="bola"></div><div><strong id="geral-texto"></strong><span class="sub" id="geral-sub"></span></div></div>
 
-    <h2>Portais, do maior para o menor</h2>
+    <h2>Portais por prioridade para a Jazz (SJC/SP)</h2>
     <div class="tabela-rolagem"><table class="portais" id="portais">
-      <thead><tr><th scope="col">#</th><th scope="col">Portal</th><th scope="col">Audiência</th><th scope="col">1. Documentação</th>
+      <thead><tr><th scope="col">#</th><th scope="col">Portal</th><th scope="col">Prioridade</th><th scope="col">Audiência</th><th scope="col">1. Documentação</th>
         <th scope="col">2. Vista</th><th scope="col">3. Dados</th><th scope="col">4. Arquivo</th><th scope="col">5. Publicação</th><th scope="col">6. Portal</th></tr></thead>
       <tbody></tbody></table></div>
-    <p class="sub">Audiência: Similarweb (ranking jul/2026, visitas dez/2024). Cinza: etapa ainda não iniciada para o portal.</p>
+    <p class="sub">Prioridade: 99,9% dos anúncios são em SP (Campinas, São José dos Campos, litoral e interior); portais regionais de outros estados ficam por último.
+      Audiência: Similarweb (ranking jul/2026, visitas dez/2024). Cinza: etapa não iniciada ou fora da prioridade.</p>
 
     <h2>Linha de cada portal</h2>
     <div class="canais" id="canais"></div>
@@ -181,12 +186,15 @@
 
     var tb = document.querySelector("#portais tbody"); tb.innerHTML = "";
     (s.portais || []).forEach(function (p, i) {
-      var tr = el("tr");
+      var tr = el("tr", p.prioridade === "Fora da região" ? "fora" : null);
       tr.appendChild(el("td", null, String(i + 1)));
       var nome = el("td", "nome", p.nome); if (p.grupo) nome.appendChild(el("small", null, p.grupo)); tr.appendChild(nome);
+      var pr = el("td", "prio"); pr.appendChild(el("span", "prio-" + (p.prioridade || "").split(" ")[0].toLowerCase(), p.prioridade || ""));
+      if (p.motivo) pr.appendChild(el("small", null, p.motivo)); tr.appendChild(pr);
       tr.appendChild(el("td", "aud", p.audiencia));
       ["documentacao", "vista", "dados", "arquivo", "publicacao", "portal"].forEach(function (k) {
         var e = p.etapas[k], st = e.status === "publicacao" ? pub : e.status;
+        if (p.prioridade === "Fora da região" && k !== "documentacao" && k !== "vista") st = "cinza";
         var td = el("td"), c = el("span", "cel " + st);
         c.setAttribute("aria-label", (ROTULO[st] || "Não iniciado") + ": " + e.texto);
         if (e.link) { var a = el("a", null, e.texto); a.href = BASE + e.link; c.appendChild(a); } else c.appendChild(document.createTextNode(e.texto));

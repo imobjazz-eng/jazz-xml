@@ -20,18 +20,21 @@ export const PORTAIS_ATIVOS = ["zap"];
  * terceiros; vermelho = não encontrada. `vista`: citado como integrado ao Vista.
  */
 export const PORTAIS = [
-  { nome: "ZAP Imóveis", grupo: "Grupo OLX", audiencia: "~15 mi visitas/mês · 1º", formato: "VRSync", doc: "verde", vista: true, canal: "zap" },
-  { nome: "VivaReal", grupo: "Grupo OLX", audiencia: "~15 mi visitas/mês", formato: "VRSync (mesmo arquivo do ZAP)", doc: "verde", vista: true, canal: "zap" },
-  { nome: "Chaves na Mão", grupo: "", audiencia: "~9,8 mi visitas/mês · 3º", formato: "Próprio (CNM)", doc: "verde", vista: true, canal: "chavesnamao" },
-  { nome: "ImovelWeb", grupo: "Navent / QuintoAndar", audiencia: "~6,7 mi visitas/mês", formato: "OpenNavent", doc: "amarelo", vista: true, canal: "imovelweb" },
-  { nome: "OLX", grupo: "Grupo OLX", audiencia: "generalista (47 mi, todas as categorias)", formato: "VRSync (mesmo arquivo do ZAP)", doc: "verde", vista: true, canal: "zap" },
-  { nome: "Wimoveis", grupo: "Navent / QuintoAndar", audiencia: "~1,3 mi visitas/mês", formato: "OpenNavent (mesmo arquivo do ImovelWeb)", doc: "amarelo", vista: false, canal: "imovelweb" },
-  { nome: "DF Imóveis", grupo: "", audiencia: "~1,3 mi visitas/mês", formato: "Não publicado (aprovação manual)", doc: "vermelho", vista: false, canal: null },
-  { nome: "Casa Mineira", grupo: "QuintoAndar", audiencia: "top 10 de concorrentes do ZAP", formato: "OpenNavent (mesmo arquivo do ImovelWeb)", doc: "amarelo", vista: true, canal: "imovelweb" },
-  { nome: "Mercado Livre Imóveis", grupo: "Mercado Livre", audiencia: "generalista (160 mi, varejo inteiro)", formato: "API (não XML)", doc: "verde", vista: true, canal: null },
-  { nome: "Netimóveis", grupo: "", audiencia: "~390 mil visitas/mês", formato: "Não encontrado", doc: "vermelho", vista: false, canal: null },
-  { nome: "123i", grupo: "", audiencia: "sem dado", formato: "Próprio (não publicado)", doc: "vermelho", vista: true, canal: null },
-  { nome: "Imóveis SC", grupo: "", audiencia: "sem dado recente", formato: "Próprio (manual de 2017)", doc: "amarelo", vista: false, canal: null },
+  // Prioridade para a Jazz (São José dos Campos/SP; 99,9% dos anúncios em SP:
+  // Campinas, SJC, litoral e interior). Alta: nacional forte em SP. Média:
+  // alcance em SP com mais esforço. Fora da região: portal regional de outro estado.
+  { nome: "ZAP Imóveis", grupo: "Grupo OLX", audiencia: "~15 mi visitas/mês · 1º", formato: "VRSync", doc: "verde", vista: true, canal: "zap", prioridade: "Alta", motivo: "Maior portal do país, forte em SP" },
+  { nome: "VivaReal", grupo: "Grupo OLX", audiencia: "~15 mi visitas/mês", formato: "VRSync (mesmo arquivo do ZAP)", doc: "verde", vista: true, canal: "zap", prioridade: "Alta", motivo: "Mesmo arquivo do ZAP" },
+  { nome: "OLX", grupo: "Grupo OLX", audiencia: "generalista (47 mi, todas as categorias)", formato: "VRSync (mesmo arquivo do ZAP)", doc: "verde", vista: true, canal: "zap", prioridade: "Alta", motivo: "Público popular e de litoral" },
+  { nome: "Chaves na Mão", grupo: "", audiencia: "~9,8 mi visitas/mês · 3º", formato: "Próprio (CNM)", doc: "verde", vista: true, canal: "chavesnamao", prioridade: "Alta", motivo: "3º em audiência; arquivo pronto" },
+  { nome: "ImovelWeb", grupo: "Navent / QuintoAndar", audiencia: "~6,7 mi visitas/mês", formato: "OpenNavent", doc: "amarelo", vista: true, canal: "imovelweb", prioridade: "Alta", motivo: "Nacional, forte em SP; arquivo pronto" },
+  { nome: "Mercado Livre Imóveis", grupo: "Mercado Livre", audiencia: "generalista (160 mi, varejo inteiro)", formato: "API (não XML)", doc: "verde", vista: true, canal: null, prioridade: "Média", motivo: "Alcance enorme; exige integração por API" },
+  { nome: "123i", grupo: "", audiencia: "sem dado", formato: "Próprio (não publicado)", doc: "vermelho", vista: true, canal: null, prioridade: "Média", motivo: "Integrado ao Vista; pedir o manual ao portal" },
+  { nome: "Wimoveis", grupo: "Navent / QuintoAndar", audiencia: "~1,3 mi visitas/mês", formato: "OpenNavent (mesmo arquivo do ImovelWeb)", doc: "amarelo", vista: false, canal: "imovelweb", prioridade: "Fora da região", motivo: "Foco no Distrito Federal" },
+  { nome: "Casa Mineira", grupo: "QuintoAndar", audiencia: "top 10 de concorrentes do ZAP", formato: "OpenNavent (mesmo arquivo do ImovelWeb)", doc: "amarelo", vista: true, canal: "imovelweb", prioridade: "Fora da região", motivo: "Foco em Minas Gerais" },
+  { nome: "DF Imóveis", grupo: "", audiencia: "~1,3 mi visitas/mês", formato: "Não publicado (aprovação manual)", doc: "vermelho", vista: false, canal: null, prioridade: "Fora da região", motivo: "Só Distrito Federal" },
+  { nome: "Netimóveis", grupo: "", audiencia: "~390 mil visitas/mês", formato: "Não encontrado", doc: "vermelho", vista: false, canal: null, prioridade: "Fora da região", motivo: "Foco em MG e RJ" },
+  { nome: "Imóveis SC", grupo: "", audiencia: "sem dado recente", formato: "Próprio (manual de 2017)", doc: "amarelo", vista: false, canal: null, prioridade: "Fora da região", motivo: "Só Santa Catarina" },
 ];
 
 const pct = (n, total) => (total ? Math.round((n / total) * 1000) / 10 : 0);
@@ -137,11 +140,11 @@ export function montarSaude(xml, info = {}) {
   const portais = PORTAIS.map((p) => {
     const c = p.canal ? porId[p.canal] : null;
     return {
-      nome: p.nome, grupo: p.grupo, audiencia: p.audiencia, formato: p.formato,
+      nome: p.nome, grupo: p.grupo, audiencia: p.audiencia, formato: p.formato, prioridade: p.prioridade, motivo: p.motivo,
       etapas: {
         documentacao: { status: p.doc, texto: p.doc === "verde" ? "Oficial" : p.doc === "amarelo" ? "De terceiros" : "Não encontrada" },
         vista: { status: p.vista ? "verde" : "amarelo", texto: p.vista ? "Integrado ao Vista" : "Fora da lista do Vista" },
-        dados: c ? { status: statusEtapas, texto: statusEtapas === "verde" ? "Completos" : "Com pendências (fotos, tour...)" } : { status: "cinza", texto: "—" },
+        dados: c ? { status: statusEtapas, texto: statusEtapas === "verde" ? "Completos" : "Com pendências" } : { status: "cinza", texto: "—" },
         arquivo: c ? { status: c.statusArquivo, texto: c.arquivo, link: c.arquivo } : { status: "cinza", texto: p.formato.startsWith("API") ? "Exige API" : "Não gerado" },
         publicacao: c ? { status: "publicacao", texto: "A cada 10 min" } : { status: "cinza", texto: "—" },
         portal: c ? { status: c.ativacao.status, texto: c.ativacao.status === "verde" ? "Ativo" : "Ativar no portal" } : { status: "cinza", texto: "—" },
