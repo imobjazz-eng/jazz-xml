@@ -1,5 +1,7 @@
 /**
- * Tour virtual feito com as fotos do próprio anúncio, publicado no mesmo
+ * Tour virtual feito com as fotos do próprio anúncio (cada foto vira um
+ * panorama parcial no visualizador Pannellum, sem inventar nada fora dela),
+ * publicado no mesmo
  * GitHub Pages do XML (tour/index.html + tour/d/<código>.json).
  *
  * Regras do Grupo ZAP para o <VirtualTourLink>: a página tem só o tour,
