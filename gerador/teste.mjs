@@ -178,8 +178,9 @@ console.log("tour.mjs — tour virtual com as fotos do anúncio");
   ok("link completo em HTTPS, sem encurtador", link === TOUR_BASE + "?c=12345" && link.startsWith("https://imobjazz-eng.github.io/"));
   const comTitulo = listing("804", 8).replace("<Media>", "<Title><![CDATA[Casa]]></Title>\n      <Media>");
   const t1 = inserirTour(comTitulo, link);
-  ok("VirtualTourLink entra logo depois do Title", /<\/Title>\n {6}<VirtualTourLink><!\[CDATA\[https:\/\/imobjazz-eng\.github\.io\/jazz-xml\/tour\/\?c=12345\]\]><\/VirtualTourLink>\n {6}<Media>/.test(t1), t1);
-  ok("sem Title: entra antes de Media", inserirTour(listing("805", 8), link).includes("<VirtualTourLink><![CDATA[" + link + "]]></VirtualTourLink>\n      <Media>"));
+  ok("VirtualTourLink entra logo depois do Title", /<\/Title>\n {6}<VirtualTourLink>https:\/\/imobjazz-eng\.github\.io\/jazz-xml\/tour\/\?c=12345<\/VirtualTourLink>\n {6}<Media>/.test(t1), t1);
+  ok("sem Title: entra antes de Media", inserirTour(listing("805", 8), link).includes("<VirtualTourLink>" + link + "</VirtualTourLink>\n      <Media>"));
+  ok("link do tour sem CDATA e com & escapado", inserirTour(listing("806", 8), "https://x.teste/?a=1&b=2").includes("<VirtualTourLink>https://x.teste/?a=1&amp;b=2</VirtualTourLink>"));
   ok("tour do Vista fica (não duplica)", (inserirTour(t1, "https://outro/").match(/<VirtualTourLink>/g) || []).length === 1);
   let pedidos = [];
   const r = enriquecerAnuncio(comTitulo, { tourDe: (c, b) => { pedidos.push(c); return linkDoTour(c); } });
@@ -394,7 +395,7 @@ ok("título enriquecido no arquivo final", readFileSync(s1, "utf8").includes("<T
 ok("planilha de pendências gravada ao lado", existsSync(join(dir, "a", "pendencias.csv")));
 {
   const x = readFileSync(s1, "utf8");
-  const links = [...x.matchAll(/<VirtualTourLink><!\[CDATA\[([^\]]+)\]\]>/g)].map((m) => m[1]);
+  const links = [...x.matchAll(/<VirtualTourLink>([^<]+)<\/VirtualTourLink>/g)].map((m) => m[1]);
   const semArquivo = links.filter((l) => !existsSync(join(dir, "a", "tour", "d", `${new URL(l).searchParams.get("c")}.json`)));
   ok("tour: todo link do XML aponta para dados gravados", links.length > 0 && semArquivo.length === 0, `${links.length} links, ${semArquivo.length} sem arquivo`);
   const s5 = join(dir, "e", "vrsync.xml");
