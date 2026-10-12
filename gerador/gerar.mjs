@@ -21,8 +21,11 @@
  *                   O resultado é gravado como antigo.json ao lado do XML
  *   VIDEO_PADRAO    vídeo do YouTube que entra em todo anúncio sem vídeo
  *                   próprio (do Vista ou da lista); "desligado" tira
- *   TOURS360_DIR    pasta das fotos 360 enviadas pelos corretores
+ *   TOURS360_DIR    pasta das fotos 360 enviadas pelo GitHub
  *                   (padrão tours360/ do repositório; ver tour360.mjs)
+ *   TOURS360_API    banco das fotos 360 enviadas pelo celular
+ *                   (tour360/enviar.html); "desligado" não consulta
+ *   TOURS360_CACHE  tour360/ da publicação anterior (fotos já baixadas)
  *
  * Se qualquer trava disparar, sai com erro e NÃO grava nada: o arquivo
  * anterior continua no ar.
@@ -33,7 +36,7 @@ import { fileURLToPath } from "node:url";
 import { gerarFeed } from "./vista.mjs";
 import { enriquecerFeed, enderecosSemCoordenada, planilhaPendencias, linkYoutubeValido, notaEstimada, errosObrigatorios } from "./enriquecer.mjs";
 import { TOUR_BASE, TOUR_MIN_FOTOS, codigoDoTour, dadosDoTour, linkDoTour } from "./tour.mjs";
-import { TOUR360_BASE, lerTours360, linkDoTour360, publicarTours360 } from "./tour360.mjs";
+import { TOUR360_BASE, lerTours360, linkDoTour360, publicarTours360, carregarToursRemotos } from "./tour360.mjs";
 import { geocodificar, consultaCache } from "./geocodificar.mjs";
 import { ANTIGO_URL, extrairAntigo } from "./antigo.mjs";
 
@@ -139,6 +142,16 @@ try {
     const lidos = await lerTours360(process.env.TOURS360_DIR || fileURLToPath(new URL("../tours360", import.meta.url)));
     tours360 = lidos.tours;
     for (const a of lidos.avisos) console.log(`::warning::${a}`);
+    // Enviados pelo celular têm preferência sobre a pasta do repositório.
+    if (process.env.TOURS360_API !== "desligado") {
+      try {
+        const remotos = await carregarToursRemotos(process.env.TOURS360_API || undefined);
+        for (const [c, t] of remotos) tours360.set(c, t);
+        console.log(`Tour 360 enviados pelo celular: ${remotos.size} imóveis.`);
+      } catch (err) {
+        console.log(`::warning::Lista de tours 360 do celular indisponível: ${err.message}`);
+      }
+    }
     if (tours360.size) console.log(`Tour 360: ${tours360.size} imóveis com fotos 360.`);
   } catch (err) {
     console.log(`::warning::Tours 360 não lidos: ${err.message}`);
@@ -199,7 +212,8 @@ try {
   }
   if (usados360.size) {
     try {
-      await publicarTours360(usados360, dirname(destino));
+      const falhas = await publicarTours360(usados360, dirname(destino), { cache: process.env.TOURS360_CACHE || null });
+      for (const f of falhas) console.log(`::warning::Tour 360 não publicado: ${f}`);
     } catch (err) {
       console.log(`::warning::Fotos do tour 360 não publicadas: ${err.message}`);
     }

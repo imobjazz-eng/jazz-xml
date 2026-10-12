@@ -16,7 +16,7 @@ import { extrairAntigo } from "./antigo.mjs";
 import { dadosDaApi } from "./vista.mjs";
 import { ajustarPadrao, notaEstimada, errosObrigatorios, headerForaDeListings } from "./enriquecer.mjs";
 import { TOUR_BASE, codigoDoTour, fotosDoAnuncio, dadosDoTour, inserirTour, linkDoTour } from "./tour.mjs";
-import { tamanhoJpeg, eh360, nomeDoComodo, lerTours360, linkDoTour360, dadosDoTour360 } from "./tour360.mjs";
+import { tamanhoJpeg, eh360, nomeDoComodo, lerTours360, linkDoTour360, dadosDoTour360, toursDaLista, publicarTours360 } from "./tour360.mjs";
 
 const aqui = dirname(fileURLToPath(import.meta.url));
 let falhas = 0, total = 0;
@@ -216,6 +216,27 @@ const jpeg = (largura, altura) => Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x0
   ok("pasta tours360 ausente: vazio, sem erro", (await lerTours360(join(pasta, "nao-existe"))).tours.size === 0);
   ok("link 360 em HTTPS no GitHub Pages", linkDoTour360("12345") === "https://imobjazz-eng.github.io/jazz-xml/tour360/?c=12345");
   ok("dados da página: só nome e arquivo", JSON.stringify(dadosDoTour360(t).cenas[0]) === '{"f":"1.jpg","n":"Sala"}');
+
+  // Enviados pelo celular (lista da Supabase).
+  const remotos = toursDaLista({
+    "500": { cenas: [{ caminho: "500/a/1.jpg", nome: "Sala", porta: { yaw: -30, pitch: -5 } }, { caminho: "500/a/2.jpg", nome: "" }] },
+    "501": { cenas: [{ caminho: "outro/a/1.jpg" }] },
+    "../x": { cenas: [{ caminho: "../x/1.jpg" }] },
+  }, "https://banco.teste");
+  const r5 = remotos.get("500");
+  ok("lista do celular: URL pública, nome, porta e ordem", remotos.size === 1 && r5.cenas[0].url === "https://banco.teste/storage/v1/object/public/tours360/500/a/1.jpg"
+    && r5.cenas[0].porta.yaw === -30 && r5.cenas[1].nome === "Ambiente 2" && r5.cenas[1].arquivo === "2.jpg", JSON.stringify(r5));
+  ok("dados da página levam a porta", JSON.stringify(dadosDoTour360(r5).cenas[0].p) === '{"yaw":-30,"pitch":-5}');
+  const site1 = mkdtempSync(join(tmpdir(), "s360-"));
+  let baixadas = 0;
+  const baixar = async () => { baixadas++; return { ok: true, arrayBuffer: async () => jpeg(400, 200) }; };
+  ok("publica baixando as fotos", (await publicarTours360(remotos, site1, { baixar })).length === 0 && baixadas === 2 && existsSync(join(site1, "tour360", "f", "500", "2.jpg")));
+  const site2 = mkdtempSync(join(tmpdir(), "s360-"));
+  baixadas = 0;
+  await publicarTours360(remotos, site2, { baixar, cache: join(site1, "tour360") });
+  ok("já publicada: copia do cache, sem baixar de novo", baixadas === 0 && existsSync(join(site2, "tour360", "f", "500", "1.jpg")));
+  const falhas = await publicarTours360(remotos, mkdtempSync(join(tmpdir(), "s360-")), { baixar: async () => ({ ok: false, status: 404 }) });
+  ok("foto que sumiu: falha avisada, sem derrubar", falhas.length === 1 && falhas[0].includes("404"), falhas.join());
 }
 
 console.log("antigo.mjs e padrão VRSync (documentação do Grupo ZAP)");

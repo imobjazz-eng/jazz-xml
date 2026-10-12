@@ -49,9 +49,10 @@
         var proxima = cenas[i + 1] ? "c" + (i + 1) : null;
         config.scenes["c" + i] = {
           title: c.n, type: "equirectangular", panorama: "f/" + codigo + "/" + c.f, hfov: 100,
-          // "Próximo ambiente" à frente da vista inicial: o percurso segue sem
-          // ninguém marcar setas à mão.
-          hotSpots: proxima ? [{ pitch: -12, yaw: 0, type: "scene", text: "Próximo: " + cenas[i + 1].n, sceneId: proxima }] : []
+          // Seta para o próximo ambiente: na porta, se o corretor marcou no
+          // envio; senão, à frente da vista inicial.
+          hotSpots: proxima ? [{ pitch: c.p ? c.p.pitch : -12, yaw: c.p ? c.p.yaw : 0, type: "scene",
+            text: "Ir para: " + cenas[i + 1].n, sceneId: proxima, targetYaw: "sameAzimuth" }] : []
         };
       });
       var visor = pannellum.viewer("tour", config);

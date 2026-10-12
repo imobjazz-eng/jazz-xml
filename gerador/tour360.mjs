@@ -83,24 +83,94 @@ export async function lerTours360(pasta) {
 
 export const linkDoTour360 = (codigo, base = TOUR360_BASE) => `${base}?c=${encodeURIComponent(codigo)}`;
 
-/** Dados que a página lê: só nome e arquivo de cada cômodo. */
-export const dadosDoTour360 = (tour) => ({ v: 1, cenas: tour.cenas.map((c) => ({ f: c.arquivo, n: c.nome })) });
+/** Dados que a página lê: arquivo, nome e, se marcada, a porta do próximo ambiente. */
+export const dadosDoTour360 = (tour) => ({
+  v: 2,
+  cenas: tour.cenas.map((c) => ({ f: c.arquivo, n: c.nome, ...(c.porta ? { p: c.porta } : {}), ...(c.chave ? { o: c.chave } : {}) })),
+});
+
+// Envio pelo celular (tour360/enviar.html → função tour360 da Supabase): a
+// lista pública de tours vem da tours360_lista(); a chave é a publicável
+// (anon), a mesma que as páginas usam.
+export const TOURS360_API = "https://wqxcevqphhkjfcnkeiwp.supabase.co";
+export const TOURS360_CHAVE =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndxeGNldnFwaGhramZjbmtlaXdwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE1NTcxNTcsImV4cCI6MjEwNzEzMzE1N30.03YuuE29Z4H_izzYY8HlObmITULVGvdXmlDQG0PvTrI";
+
+/** Tours enviados pelo celular: Map código → {cenas: [{url, chave, arquivo, nome, porta}]}. */
+export function toursDaLista(lista, api = TOURS360_API) {
+  const tours = new Map();
+  for (const [imovel, t] of Object.entries(lista || {})) {
+    const c = codigoDoTour(imovel);
+    const cenas = Array.isArray(t?.cenas) ? t.cenas : [];
+    const validas = cenas.filter((x) => typeof x?.caminho === "string" && x.caminho.startsWith(`${imovel}/`) && /^[\w/.-]+\.jpg$/.test(x.caminho));
+    if (!c || !validas.length) continue;
+    tours.set(c, {
+      cenas: validas.map((x, i) => ({
+        url: `${api}/storage/v1/object/public/tours360/${x.caminho}`,
+        chave: x.caminho,
+        arquivo: `${i + 1}.jpg`,
+        nome: String(x.nome || `Ambiente ${i + 1}`).slice(0, 40),
+        ...(Number.isFinite(x.porta?.yaw) ? { porta: { yaw: x.porta.yaw, pitch: Number.isFinite(x.porta.pitch) ? x.porta.pitch : 0 } } : {}),
+      })),
+    });
+  }
+  return tours;
+}
+
+export async function carregarToursRemotos(api = TOURS360_API, chave = TOURS360_CHAVE) {
+  const r = await fetch(`${api}/rest/v1/rpc/tours360_lista`, {
+    method: "POST",
+    headers: { apikey: chave, Authorization: `Bearer ${chave}`, "Content-Type": "application/json" },
+    body: "{}",
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return toursDaLista(await r.json(), api);
+}
 
 /**
  * Publica as fotos em <site>/tour360/f/<código>/ (reduzidas pelo ffmpeg; sem
  * ffmpeg, copiadas como vieram) e os dados em <site>/tour360/d/<código>.json.
+ * Foto enviada pelo celular que já estava publicada (mesma chave, no cache
+ * recuperado do gh-pages) é copiada do cache, sem baixar de novo.
  */
-export async function publicarTours360(tours, site, { largura = TOUR360_LARGURA } = {}) {
+export async function publicarTours360(tours, site, { largura = TOUR360_LARGURA, cache = null, baixar = fetch } = {}) {
   const { writeFile } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const falhas = [];
   for (const [c, t] of tours) {
+    try {
+      await publicarUm(c, t);
+    } catch (err) {
+      falhas.push(`${c}: ${err.message}`);
+    }
+  }
+  return falhas;
+
+  async function publicarUm(c, t) {
     const fotos = join(site, "tour360", "f", c);
     await mkdir(fotos, { recursive: true });
+    let anterior = [];
+    if (cache) {
+      try { anterior = JSON.parse(await readFile(join(cache, "d", `${c}.json`), "utf8")).cenas || []; } catch {}
+    }
     for (const cena of t.cenas) {
       const destino = join(fotos, cena.arquivo);
+      const velha = cena.chave && anterior.find((a) => a.o === cena.chave);
+      if (velha) {
+        try { await copyFile(join(cache, "f", c, velha.f), destino); continue; } catch {}
+      }
+      let origem = cena.origem;
+      if (!origem) {
+        const r = await baixar(cena.url, { signal: AbortSignal.timeout(60_000) });
+        if (!r.ok) throw new Error(`foto ${cena.chave}: HTTP ${r.status}`);
+        origem = join(tmpdir(), `t360-${process.pid}-${c}-${cena.arquivo}`);
+        await writeFile(origem, Buffer.from(await r.arrayBuffer()));
+      }
       try {
-        await roda("ffmpeg", ["-v", "error", "-y", "-i", cena.origem, "-vf", `scale='min(${largura},iw)':-2`, "-q:v", "3", destino]);
+        await roda("ffmpeg", ["-v", "error", "-y", "-i", origem, "-vf", `scale='min(${largura},iw)':-2`, "-q:v", "3", destino]);
       } catch {
-        await copyFile(cena.origem, destino);
+        await copyFile(origem, destino);
       }
     }
     await mkdir(join(site, "tour360", "d"), { recursive: true });
