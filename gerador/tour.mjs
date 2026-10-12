@@ -44,12 +44,18 @@ export function linkDoTour(codigo, base = TOUR_BASE) {
   return `${base}?c=${encodeURIComponent(codigo)}`;
 }
 
-/** Põe o <VirtualTourLink> logo depois do <Title>, como o Vista faz. */
+/**
+ * Põe o <VirtualTourLink> logo depois do <Title>, como o Vista faz. Link
+ * puro, sem CDATA, como no exemplo da documentação do Grupo ZAP
+ * (developers.grupozap.com/feeds/vrsync/elements/listing.html#virtual-tour),
+ * igual ao vídeo, que o portal reconhece; "&" escapado.
+ */
 export function inserirTour(bloco, url) {
   if (/<VirtualTourLink>/.test(bloco)) return bloco;
-  const comTitulo = bloco.replace(/(\n([ \t]*)<Title>[\s\S]*?<\/Title>)/, (m, _t, ind) => `${m}\n${ind}<VirtualTourLink><![CDATA[${url}]]></VirtualTourLink>`);
+  url = String(url).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  const comTitulo = bloco.replace(/(\n([ \t]*)<Title>[\s\S]*?<\/Title>)/, (m, _t, ind) => `${m}\n${ind}<VirtualTourLink>${url}</VirtualTourLink>`);
   if (comTitulo !== bloco) return comTitulo;
-  return bloco.replace(/(\n([ \t]*))<Media>/, (m, quebra) => `${quebra}<VirtualTourLink><![CDATA[${url}]]></VirtualTourLink>${quebra}<Media>`);
+  return bloco.replace(/(\n([ \t]*))<Media>/, (m, quebra) => `${quebra}<VirtualTourLink>${url}</VirtualTourLink>${quebra}<Media>`);
 }
 
 /** Dados que a página do tour lê: só fotos e legenda, nada de contato. */
