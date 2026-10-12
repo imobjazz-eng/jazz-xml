@@ -23,11 +23,9 @@ export const PORTAIS = [
   // Prioridade para a Jazz (São José dos Campos/SP; 99,9% dos anúncios em SP:
   // Campinas, SJC, litoral e interior). Alta: nacional forte em SP. Média:
   // alcance em SP com mais esforço. Fora da região: portal regional de outro estado.
-  { nome: "ZAP Imóveis", grupo: "Grupo OLX", audiencia: "~15 mi visitas/mês · 1º", formato: "VRSync", doc: "verde", vista: true, canal: "zap", prioridade: "Alta", motivo: "Maior portal do país, forte em SP" },
-  { nome: "VivaReal", grupo: "Grupo OLX", audiencia: "~15 mi visitas/mês", formato: "VRSync (mesmo arquivo do ZAP)", doc: "verde", vista: true, canal: "zap", prioridade: "Alta", motivo: "Mesmo arquivo do ZAP" },
-  { nome: "OLX", grupo: "Grupo OLX", audiencia: "generalista (47 mi, todas as categorias)", formato: "VRSync (mesmo arquivo do ZAP)", doc: "verde", vista: true, canal: "zap", prioridade: "Alta", motivo: "Público popular e de litoral" },
-  { nome: "Chaves na Mão", grupo: "", audiencia: "~9,8 mi visitas/mês · 3º", formato: "Próprio (CNM)", doc: "verde", vista: true, canal: "chavesnamao", prioridade: "Alta", motivo: "3º em audiência; arquivo pronto" },
+  { nome: "Grupo OLX: ZAP Imóveis, VivaReal e OLX", grupo: "Um só arquivo (Canal Pro)", audiencia: "~15 mi visitas/mês cada · ZAP 1º", formato: "VRSync", doc: "verde", vista: true, canal: "zap", prioridade: "Alta", motivo: "Maior grupo do país, forte em SP; inclui o público popular e de litoral da OLX" },
   { nome: "QuintoAndar", grupo: "Rede QuintoAndar", audiencia: "~12,8 mi visitas/mês · 2º", formato: "Via ImovelWeb (filtro no portal de integração)", doc: "amarelo", vista: true, canal: "imovelweb", prioridade: "Alta", motivo: "2º em audiência; recebe os anúncios do ImovelWeb (exige parceria)" },
+  { nome: "Chaves na Mão", grupo: "", audiencia: "~9,8 mi visitas/mês · 3º", formato: "Próprio (CNM)", doc: "verde", vista: true, canal: "chavesnamao", prioridade: "Alta", motivo: "3º em audiência; arquivo pronto" },
   { nome: "ImovelWeb", grupo: "Navent / QuintoAndar", audiencia: "~6,7 mi visitas/mês", formato: "OpenNavent", doc: "amarelo", vista: true, canal: "imovelweb", prioridade: "Alta", motivo: "Nacional, forte em SP; porta de entrada para o QuintoAndar" },
   { nome: "Mercado Livre Imóveis", grupo: "Mercado Livre", audiencia: "generalista (160 mi, varejo inteiro)", formato: "API (não XML)", doc: "verde", vista: true, canal: null, prioridade: "Média", motivo: "Alcance enorme; exige integração por API" },
   { nome: "123i", grupo: "", audiencia: "sem dado", formato: "Próprio (não publicado)", doc: "vermelho", vista: true, canal: null, prioridade: "Média", motivo: "Integrado ao Vista; pedir o manual ao portal" },
