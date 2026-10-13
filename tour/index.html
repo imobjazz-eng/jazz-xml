@@ -49,10 +49,15 @@
   var fotos = [], atual = 0, visor = null, tocando = true, relogio = 0, criadas = {};
   function vazio() { document.body.classList.add("vazio"); }
 
-  var codigo = new URLSearchParams(location.search).get("c") || "";
+  // Código no caminho (…/tour/<código>/, um endereço por anúncio) ou em ?c=.
+  var noCaminho = (location.pathname.match(/\/([A-Za-z0-9_-]{1,40})\/?$/) || [])[1];
+  var pasta = location.pathname.replace(/[^/]*$/, "");
+  var naSubpasta = noCaminho && !/\/(tour|tour360)\/?$/.test(pasta.replace(/\/$/, "")) ? true : false;
+  var codigo = new URLSearchParams(location.search).get("c") || (naSubpasta ? noCaminho : "");
+  var RAIZ = naSubpasta ? "../" : "";
   if (!/^[A-Za-z0-9_-]{1,40}$/.test(codigo) || !window.pannellum) return vazio();
 
-  fetch("d/" + encodeURIComponent(codigo) + ".json", { cache: "no-cache" })
+  fetch(RAIZ + "d/" + encodeURIComponent(codigo) + ".json", { cache: "no-cache" })
     .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
     .then(function (d) {
       fotos = (d && d.fotos || []).filter(function (f) { return f && /^https:\/\//.test(f.u); });

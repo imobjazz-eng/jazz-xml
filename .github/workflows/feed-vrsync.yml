@@ -155,6 +155,13 @@ jobs:
           mkdir -p site/tour360 && cp tour360/*.html site/tour360/
           # Painel de saúde: a página; os dados (saude.json) o gerador gravou.
           mkdir -p site/saude && cp saude/index.html site/saude/index.html
+          # Um endereço por anúncio (tour/<código>/): cópias idênticas da
+          # página, que o git guarda uma vez só.
+          for f in site/tour/d/*.json site/tour360/d/*.json; do
+            [ -f "$f" ] || continue
+            pasta=$(dirname "$(dirname "$f")"); c=$(basename "$f" .json)
+            mkdir -p "$pasta/$c" && cp "$pasta/index.html" "$pasta/$c/index.html"
+          done
           cd site
           touch .nojekyll
           cat > index.html <<HTML

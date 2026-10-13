@@ -373,8 +373,11 @@ export function fichaDoImovel(a) {
   if (linhas.length) partes.push(["Ficha do imóvel:", ...linhas.map((l) => `- ${l}`)].join("\n"));
   const dif = [...new Set(a.diferenciais)];
   if (dif.length) partes.push(`Diferenciais: ${dif.join(", ")}.`);
+  // Fecho como no XML anterior (100% em descrição no Canal Pro): tipo,
+  // transação, bairro e cidade numa frase só, as palavras-chave da busca.
   const local = [a.bairro, a.cidade && (a.uf ? `${a.cidade}/${a.uf}` : a.cidade)].filter(Boolean).join(", ");
-  if (local && partes.length) partes.push(`Localização: ${local}.`);
+  const operacao = /Sale\/Rent/.test(a.transacao || "") ? "à venda e para alugar" : /Rent/.test(a.transacao || "") ? "para alugar" : "à venda";
+  if (local && partes.length) partes.push(`${a.tipo || "Imóvel"} ${operacao} no ${local}.`);
   return partes.join("\n\n");
 }
 

@@ -40,8 +40,13 @@ export function fotosDoAnuncio(bloco) {
   return fotos.filter((f) => !vistas.has(f.u) && vistas.add(f.u));
 }
 
+/**
+ * Um endereço por anúncio, com o código no caminho (tour/<código>/), como o
+ * XML anterior fazia (visita/<código>), que o Canal Pro contava como tour.
+ * O workflow cria tour/<código>/index.html (cópia idêntica da página).
+ */
 export function linkDoTour(codigo, base = TOUR_BASE) {
-  return `${base}?c=${encodeURIComponent(codigo)}`;
+  return `${base}${encodeURIComponent(codigo)}/`;
 }
 
 /**

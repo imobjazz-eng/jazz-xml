@@ -81,7 +81,7 @@ export async function lerTours360(pasta) {
   return { tours, avisos };
 }
 
-export const linkDoTour360 = (codigo, base = TOUR360_BASE) => `${base}?c=${encodeURIComponent(codigo)}`;
+export const linkDoTour360 = (codigo, base = TOUR360_BASE) => `${base}${encodeURIComponent(codigo)}/`;
 
 /** Dados que a página lê: arquivo, nome e, se marcada, a porta do próximo ambiente. */
 export const dadosDoTour360 = (tour) => ({
