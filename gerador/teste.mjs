@@ -116,7 +116,7 @@ let d = enriquecerDescricao("Cozinha &amp; área de serviço. Ligue (19) 99798-4
 ok("&amp; vira &", d.texto.includes("Cozinha & área"), d.texto);
 ok("frase com telefone e site sai inteira", !/99798|site\.com|Ligue/.test(d.texto) && d.texto.includes("Linda casa."), d.texto);
 ok("descrição curta ganha a ficha só com dados do anúncio",
-  d.ficha && d.texto.includes("- Área útil: 135 m²") && d.texto.includes("- 3 quartos, sendo 1 suíte") && d.texto.includes("Diferenciais: Piscina, Churrasqueira.") && d.texto.includes("Localização: Centro, Campinas/SP."), d.texto);
+  d.ficha && d.texto.includes("- Área útil: 135 m²") && d.texto.includes("- 3 quartos, sendo 1 suíte") && d.texto.includes("Diferenciais: Piscina, Churrasqueira.") && /\b(?:no|Imóvel|Casa|Apartamento)\b.*à venda no Centro, Campinas\/SP\./.test(d.texto), d.texto);
 ok("sem linhas em branco em excesso", !/\n{3,}/.test(d.texto));
 d = enriquecerDescricao("CASA COM PISCINA E CHURRASQUEIRA NO CENTRO DE SÃO JOSÉ DOS CAMPOS. ACEITA FINANCIAMENTO PELO FGTS.", anuncio, { curta: 0, restaurarNomes: (t) => t.replace(/são josé dos campos/gi, "São José dos Campos") });
 ok("linha em maiúsculas vira frase, preservando sigla e nome", d.texto === "Casa com piscina e churrasqueira no centro de São José dos Campos. Aceita financiamento pelo FGTS.", d.texto);
@@ -178,21 +178,21 @@ console.log("tour.mjs — tour virtual com as fotos do anúncio");
   ok("menos fotos que o mínimo: sem tour", dadosDoTour(listing("802", 6)) === null && dadosDoTour(listing("803", 7)).fotos.length === 7);
   ok("código vira arquivo só se for seguro", codigoDoTour("12345") === "12345" && codigoDoTour("../x") === null && codigoDoTour("") === null);
   const link = linkDoTour("12345");
-  ok("link completo em HTTPS, sem encurtador", link === TOUR_BASE + "?c=12345" && link.startsWith("https://imobjazz-eng.github.io/"));
+  ok("link completo em HTTPS, sem encurtador", link === TOUR_BASE + "12345/" && link.startsWith("https://imobjazz-eng.github.io/"));
   const comTitulo = listing("804", 8).replace("<Media>", "<Title><![CDATA[Casa]]></Title>\n      <Media>");
   const t1 = inserirTour(comTitulo, link);
-  ok("VirtualTourLink entra logo depois do Title", /<\/Title>\n {6}<VirtualTourLink>https:\/\/imobjazz-eng\.github\.io\/jazz-xml\/tour\/\?c=12345<\/VirtualTourLink>\n {6}<Media>/.test(t1), t1);
+  ok("VirtualTourLink entra logo depois do Title", /<\/Title>\n {6}<VirtualTourLink>https:\/\/imobjazz-eng\.github\.io\/jazz-xml\/tour\/12345\/<\/VirtualTourLink>\n {6}<Media>/.test(t1), t1);
   ok("sem Title: entra antes de Media", inserirTour(listing("805", 8), link).includes("<VirtualTourLink>" + link + "</VirtualTourLink>\n      <Media>"));
   ok("link do tour sem CDATA e com & escapado", inserirTour(listing("806", 8), "https://x.teste/?a=1&b=2").includes("<VirtualTourLink>https://x.teste/?a=1&amp;b=2</VirtualTourLink>"));
   ok("tour do Vista fica (não duplica)", (inserirTour(t1, "https://outro/").match(/<VirtualTourLink>/g) || []).length === 1);
   let pedidos = [];
   const r = enriquecerAnuncio(comTitulo, { tourDe: (c, b) => { pedidos.push(c); return linkDoTour(c); } });
-  ok("enriquecer pede o tour e marca", r.mudou.tour && pedidos[0] === "804" && r.bloco.includes("?c=804"));
+  ok("enriquecer pede o tour e marca", r.mudou.tour && pedidos[0] === "804" && r.bloco.includes("/tour/804/"));
   pedidos = [];
   const r2 = enriquecerAnuncio(t1, { tourDe: (c) => { pedidos.push(c); return linkDoTour(c); } });
   ok("quem já tem tour nem pede dados", !r2.mudou.tour && pedidos.length === 0);
   const vf = enriquecerFeed(feed([["900", 8], ["901", 3]]), { tourDe: (c, b) => (dadosDoTour(b) ? linkDoTour(c) : null) });
-  ok("feed: tour só em quem tem fotos suficientes", vf.resumo.tour === 1 && vf.xml.includes("?c=900") && !vf.xml.includes("?c=901"));
+  ok("feed: tour só em quem tem fotos suficientes", vf.resumo.tour === 1 && vf.xml.includes("/tour/900/") && !vf.xml.includes("/tour/901/"));
 }
 
 console.log("tour360.mjs — tour 360 com as fotos enviadas pelo corretor");
@@ -218,7 +218,7 @@ const jpeg = (largura, altura) => Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x0
   ok("pasta sem foto 360 não vira tour", !tours.has("777") && tours.size === 1);
   ok("avisa foto comum e pasta inválida", avisos.some((a) => a.includes("foto-comum.jpg")) && avisos.some((a) => a.includes("..x")), avisos.join(" | "));
   ok("pasta tours360 ausente: vazio, sem erro", (await lerTours360(join(pasta, "nao-existe"))).tours.size === 0);
-  ok("link 360 em HTTPS no GitHub Pages", linkDoTour360("12345") === "https://imobjazz-eng.github.io/jazz-xml/tour360/?c=12345");
+  ok("link 360 em HTTPS no GitHub Pages", linkDoTour360("12345") === "https://imobjazz-eng.github.io/jazz-xml/tour360/12345/");
   ok("dados da página: só nome e arquivo", JSON.stringify(dadosDoTour360(t).cenas[0]) === '{"f":"1.jpg","n":"Sala"}');
 
   // Enviados pelo celular (lista da Supabase).
@@ -458,7 +458,7 @@ ok("chavesnamao.xml, imovelweb.xml e saude.json gravados ao lado", ["chavesnamao
 {
   const x = readFileSync(s1, "utf8");
   const links = [...x.matchAll(/<VirtualTourLink>([^<]+)<\/VirtualTourLink>/g)].map((m) => m[1]);
-  const semArquivo = links.filter((l) => !existsSync(join(dir, "a", "tour", "d", `${new URL(l).searchParams.get("c")}.json`)));
+  const semArquivo = links.filter((l) => !existsSync(join(dir, "a", "tour", "d", `${new URL(l).pathname.split("/").filter(Boolean).pop()}.json`)));
   ok("tour: todo link do XML aponta para dados gravados", links.length > 0 && semArquivo.length === 0, `${links.length} links, ${semArquivo.length} sem arquivo`);
   const s5 = join(dir, "e", "vrsync.xml");
   rodar({ XML_FALSO: arquivo(feed(muitos)), CODIGOS_FALSOS: JSON.stringify(codigos), TOUR_BASE: "desligado" }, s5);
@@ -475,7 +475,7 @@ ok("chavesnamao.xml, imovelweb.xml e saude.json gravados ao lado", ["chavesnamao
   const s7 = join(dir, "g", "vrsync.xml");
   rodar({ XML_FALSO: arquivo(feed(muitos)), CODIGOS_FALSOS: JSON.stringify(codigos), TOURS360_DIR: fotos }, s7);
   const x7 = existsSync(s7) ? readFileSync(s7, "utf8") : "";
-  ok("tour 360 entra no anúncio no lugar do tour de fotos", x7.includes("tour360/?c=10000") && !x7.includes("jazz-xml/tour/?c=10000") && x7.includes("jazz-xml/tour/?c=10001"));
+  ok("tour 360 entra no anúncio no lugar do tour de fotos", x7.includes("tour360/10000/") && !x7.includes("jazz-xml/tour/10000/") && x7.includes("jazz-xml/tour/10001/"));
   ok("tour 360: dados e foto publicados ao lado", existsSync(join(dir, "g", "tour360", "d", "10000.json")) && existsSync(join(dir, "g", "tour360", "f", "10000", "1.jpg")));
 }
 

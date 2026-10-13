@@ -34,11 +34,16 @@
 <script>
 (function () {
   "use strict";
-  var codigo = new URLSearchParams(location.search).get("c") || "";
+  // Código no caminho (…/tour/<código>/, um endereço por anúncio) ou em ?c=.
+  var noCaminho = (location.pathname.match(/\/([A-Za-z0-9_-]{1,40})\/?$/) || [])[1];
+  var pasta = location.pathname.replace(/[^/]*$/, "");
+  var naSubpasta = noCaminho && !/\/(tour|tour360)\/?$/.test(pasta.replace(/\/$/, "")) ? true : false;
+  var codigo = new URLSearchParams(location.search).get("c") || (naSubpasta ? noCaminho : "");
+  var RAIZ = naSubpasta ? "../" : "";
   function vazio() { document.body.classList.add("vazio"); }
   if (!/^[A-Za-z0-9_-]{1,40}$/.test(codigo) || !window.pannellum) return vazio();
 
-  fetch("d/" + codigo + ".json", { cache: "no-cache" })
+  fetch(RAIZ + "d/" + codigo + ".json", { cache: "no-cache" })
     .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
     .then(function (d) {
       var cenas = (d && d.cenas) || [];
@@ -48,7 +53,7 @@
       cenas.forEach(function (c, i) {
         var proxima = cenas[i + 1] ? "c" + (i + 1) : null;
         config.scenes["c" + i] = {
-          title: c.n, type: "equirectangular", panorama: "f/" + codigo + "/" + c.f, hfov: 100,
+          title: c.n, type: "equirectangular", panorama: RAIZ + "f/" + codigo + "/" + c.f, hfov: 100,
           // Seta para o próximo ambiente: na porta, se o corretor marcou no
           // envio; senão, à frente da vista inicial.
           hotSpots: proxima ? [{ pitch: c.p ? c.p.pitch : -12, yaw: c.p ? c.p.yaw : 0, type: "scene",
