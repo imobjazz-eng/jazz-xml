@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Enviar tour 360°</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pannellum/2.5.6/pannellum.css">
+<style>
+  /* Envio das fotos 360 pelo celular, sem login (gratuito; inspirado no link de
+     carregamento da Pedra). As fotos são conferidas (2:1) e reduzidas para
+     4096 px aqui mesmo, sobem direto para o armazenamento e o tour entra no
+     XML dos portais em até 10 minutos. */
+  :root { color-scheme: light dark; --fundo: #f6f7f9; --cartao: #fff; --texto: #1d2129; --suave: #5b6472; --linha: #dde1e7;
+    --acento: #0b6bcb; --acento-texto: #fff; --erro: #b42318; --ok: #067647; }
+  @media (prefers-color-scheme: dark) { :root { --fundo: #111418; --cartao: #1b1f25; --texto: #e8eaed; --suave: #a1a8b3; --linha: #2c323a;
+    --acento: #4c9ffe; --acento-texto: #0b1220; --erro: #f97066; --ok: #47cd89; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--fundo); color: var(--texto); font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 640px; margin: 0 auto; padding: 16px 16px 120px; }
+  h1 { font-size: 22px; margin: 8px 0 4px; }
+  p.sub { color: var(--suave); margin: 0 0 16px; font-size: 14px; }
+  .cartao { background: var(--cartao); border: 1px solid var(--linha); border-radius: 12px; padding: 14px; margin-bottom: 12px; }
+  label { display: block; font-size: 13px; color: var(--suave); margin-bottom: 4px; }
+  input[type=text], input[type=password] { width: 100%; font: inherit; padding: 10px 12px; border: 1px solid var(--linha); border-radius: 8px;
+    background: transparent; color: inherit; }
+  .linha { display: flex; gap: 8px; align-items: end; }
+  .linha > div { flex: 1; }
+  button, .botao { font: inherit; border: 1px solid var(--linha); background: var(--cartao); color: var(--texto); border-radius: 8px;
+    padding: 10px 14px; cursor: pointer; }
+  button.principal, .botao.principal { background: var(--acento); color: var(--acento-texto); border-color: var(--acento); font-weight: 600; }
+  button:disabled { opacity: .5; cursor: default; }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+  .botao input { display: none; }
+  #cenas { list-style: none; margin: 0; padding: 0; }
+  #cenas li { display: grid; grid-template-columns: 112px 1fr; gap: 10px; padding: 10px 0; border-top: 1px solid var(--linha); }
+  #cenas li:first-child { border-top: 0; }
+  #cenas img { width: 112px; height: 56px; object-fit: cover; border-radius: 6px; background: var(--linha); }
+  #cenas .acoes { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  #cenas .acoes button { padding: 6px 10px; font-size: 14px; }
+  .porta-ok { color: var(--ok); font-size: 13px; }
+  .msg { font-size: 14px; margin: 8px 0 0; }
+  .msg.erro { color: var(--erro); } .msg.ok { color: var(--ok); }
+  #rodape { position: fixed; left: 0; right: 0; bottom: 0; background: var(--cartao); border-top: 1px solid var(--linha);
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); }
+  #rodape .dentro { max-width: 640px; margin: 0 auto; display: flex; gap: 8px; align-items: center; }
+  #rodape .dentro span { flex: 1; font-size: 14px; color: var(--suave); }
+  #modal { position: fixed; inset: 0; background: #000; display: none; z-index: 10; }
+  #modal.aberto { display: block; }
+  #visor { position: absolute; inset: 0; }
+  #modal .topo { position: absolute; top: 0; left: 0; right: 0; z-index: 3; padding: calc(10px + env(safe-area-inset-top)) 12px 10px;
+    background: rgba(0,0,0,.6); color: #fff; font-size: 14px; display: flex; gap: 8px; align-items: center; }
+  #modal .topo span { flex: 1; }
+  .escondido { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Tour 360° do imóvel</h1>
+  <p class="sub">Envie uma foto 360 por ambiente, na ordem do passeio. O tour entra no anúncio dos portais em até 10 minutos.</p>
+
+  <section class="cartao">
+    <div class="linha">
+      <div><label for="imovel">Código do imóvel no Vista</label><input id="imovel" type="text" inputmode="text" autocomplete="off" placeholder="ex.: 12345"></div>
+      <button id="abrir" class="principal">Abrir</button>
+    </div>
+    <div style="margin-top:10px"><label for="acesso">Código de acesso da equipe</label><input id="acesso" type="password" autocomplete="current-password"></div>
+    <p id="msg-topo" class="msg" role="status"></p>
+  </section>
+
+  <section id="painel" class="cartao escondido">
+    <ol id="cenas"></ol>
+    <p id="vazio" class="sub">Nenhuma foto ainda.</p>
+    <div class="linha" style="margin-top:8px">
+      <label class="botao principal" style="text-align:center;margin:0">+ Adicionar fotos 360
+        <input id="arquivos" type="file" accept="image/jpeg,image/*" multiple></label>
+      <button id="remover" class="escondido">Apagar tour</button>
+    </div>
+    <p class="sub" style="margin-top:10px">Dica: no celular, use um app de foto esférica ou uma câmera 360; a foto precisa ser 2:1 (ex.: 8000 x 4000).
+      Toque em <b>Marcar porta</b> e depois na porta que leva ao próximo ambiente: a seta do tour fica nela.</p>
+    <p id="msg-painel" class="msg" role="status"></p>
+  </section>
+</main>
+
+<div id="rodape" class="escondido"><div class="dentro"><span id="resumo"></span><button id="publicar" class="principal">Publicar tour</button></div></div>
+
+<div id="modal" role="dialog" aria-modal="true" aria-label="Marcar a porta">
+  <div class="topo"><span id="modal-texto">Toque na porta que leva ao próximo ambiente.</span><button id="fechar">Concluir</button></div>
+  <div id="visor"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pannellum/2.5.6/pannellum.js"></script>
+<script>
+(function () {
+  "use strict";
+  var API = "https://wqxcevqphhkjfcnkeiwp.supabase.co";
+  var CHAVE = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndxeGNldnFwaGhramZjbmtlaXdwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE1NTcxNTcsImV4cCI6MjEwNzEzMzE1N30.03YuuE29Z4H_izzYY8HlObmITULVGvdXmlDQG0PvTrI";
+  var LARGURA = 4096;
+  var $ = function (id) { return document.getElementById(id); };
+  var cenas = [], imovel = "", mexeu = false;
+
+  try { $("acesso").value = localStorage.getItem("tour360.acesso") || ""; } catch (e) {}
+  var q = new URLSearchParams(location.search).get("c");
+  if (q) $("imovel").value = q;
+
+  function msg(id, texto, tipo) { var el = $(id); el.textContent = texto || ""; el.className = "msg" + (tipo ? " " + tipo : ""); }
+  function chamar(corpo) {
+    return fetch(API + "/functions/v1/tour360", {
+      method: "POST", headers: { "Content-Type": "application/json", apikey: CHAVE, Authorization: "Bearer " + CHAVE },
+      body: JSON.stringify(corpo)
+    }).then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.erro || ("erro " + r.status)); return j; }); });
+  }
+  function nomeDoArquivo(a, n) {
+    var b = a.replace(/\.[^.]+$/, "").replace(/^\d+\s*[-_. ]*\s*/, "").replace(/[-_]+/g, " ").trim();
+    if (!b || /^(img|pano|r00|dsc|pxl|vid|photo|foto)\b/i.test(b) || /^\d/.test(b)) return "Ambiente " + n;
+    return (b[0].toUpperCase() + b.slice(1)).slice(0, 40);
+  }
+
+  $("abrir").addEventListener("click", function () {
+    var c = $("imovel").value.trim();
+    if (!/^[A-Za-z0-9_-]{1,40}$/.test(c)) return msg("msg-topo", "Digite o código do imóvel (só letras, números, - e _).", "erro");
+    if (!$("acesso").value.trim()) return msg("msg-topo", "Digite o código de acesso da equipe.", "erro");
+    try { localStorage.setItem("tour360.acesso", $("acesso").value.trim()); } catch (e) {}
+    msg("msg-topo", "Abrindo…");
+    chamar({ acao: "ver", imovel: c }).then(function (j) {
+      imovel = c; mexeu = false;
+      cenas = (j.cenas || []).map(function (x) {
+        return { caminho: x.caminho, url: API + "/storage/v1/object/public/tours360/" + x.caminho, thumb: API + "/storage/v1/object/public/tours360/" + x.caminho, nome: x.nome, porta: x.porta || null };
+      });
+      msg("msg-topo", cenas.length ? "Imóvel " + c + ": tour com " + cenas.length + " ambiente(s). Você pode reordenar, renomear, marcar portas ou adicionar fotos." : "Imóvel " + c + ": ainda sem tour. Adicione as fotos 360.", "ok");
+      $("painel").classList.remove("escondido");
+      $("remover").classList.toggle("escondido", !cenas.length);
+      desenhar();
+    }).catch(function (e) { msg("msg-topo", e.message, "erro"); });
+  });
+
+  // Confere 2:1 e reduz para no máximo 4096 px no próprio celular.
+  function preparar(arquivo) {
+    return new Promise(function (ok, falha) {
+      var url = URL.createObjectURL(arquivo), img = new Image();
+      img.onload = function () {
+        var w = img.naturalWidth, h = img.naturalHeight, r = w / h;
+        if (r < 1.9 || r > 2.1) { URL.revokeObjectURL(url); return falha(new Error(arquivo.name + " não é foto 360 (precisa ser 2:1; veio " + w + "x" + h + ")")); }
+        var lw = Math.min(LARGURA, w), lh = Math.round(lw / 2);
+        var tela = document.createElement("canvas"); tela.width = lw; tela.height = lh;
+        tela.getContext("2d").drawImage(img, 0, 0, lw, lh);
+        var mini = document.createElement("canvas"); mini.width = 224; mini.height = 112;
+        mini.getContext("2d").drawImage(img, 0, 0, 224, 112);
+        URL.revokeObjectURL(url);
+        tela.toBlob(function (blob) {
+          if (!blob) return falha(new Error(arquivo.name + ": não foi possível converter"));
+          ok({ blob: blob, url: URL.createObjectURL(blob), thumb: mini.toDataURL("image/jpeg", 0.7), porta: null });
+        }, "image/jpeg", 0.85);
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); falha(new Error(arquivo.name + ": formato não suportado neste aparelho")); };
+      img.src = url;
+    });
+  }
+
+  $("arquivos").addEventListener("change", function (ev) {
+    var lista = Array.prototype.slice.call(ev.target.files || []).sort(function (a, b) { return a.name.localeCompare(b.name, "pt-BR", { numeric: true }); });
+    ev.target.value = "";
+    if (!lista.length) return;
+    msg("msg-painel", "Preparando " + lista.length + " foto(s)…");
+    var erros = [], seq = Promise.resolve();
+    lista.forEach(function (a) {
+      seq = seq.then(function () {
+        return preparar(a).then(function (c) { c.nome = nomeDoArquivo(a.name, cenas.length + 1); cenas.push(c); mexeu = true; desenhar(); })
+          .catch(function (e) { erros.push(e.message); });
+      });
+    });
+    seq.then(function () { msg("msg-painel", erros.length ? erros.join(" · ") : "", erros.length ? "erro" : ""); });
+  });
+
+  function desenhar() {
+    var ol = $("cenas"); ol.innerHTML = "";
+    $("vazio").classList.toggle("escondido", cenas.length > 0);
+    cenas.forEach(function (c, i) {
+      var li = document.createElement("li");
+      var img = document.createElement("img"); img.src = c.thumb; img.alt = ""; img.loading = "lazy";
+      var d = document.createElement("div");
+      var nome = document.createElement("input"); nome.type = "text"; nome.value = c.nome; nome.maxLength = 40;
+      nome.setAttribute("aria-label", "Nome do ambiente " + (i + 1));
+      nome.addEventListener("input", function () { c.nome = nome.value; mexeu = true; resumo(); });
+      var acoes = document.createElement("div"); acoes.className = "acoes";
+      function botao(texto, rotulo, fn, desligado) {
+        var b = document.createElement("button"); b.type = "button"; b.textContent = texto; b.setAttribute("aria-label", rotulo);
+        b.disabled = !!desligado; b.addEventListener("click", fn); acoes.appendChild(b);
+      }
+      botao("↑", "Subir", function () { cenas.splice(i - 1, 0, cenas.splice(i, 1)[0]); mexeu = true; desenhar(); }, i === 0);
+      botao("↓", "Descer", function () { cenas.splice(i + 1, 0, cenas.splice(i, 1)[0]); mexeu = true; desenhar(); }, i === cenas.length - 1);
+      if (i < cenas.length - 1) botao(c.porta ? "Porta ✓" : "Marcar porta", "Marcar a porta para o próximo ambiente", function () { marcarPorta(c); });
+      botao("✕", "Tirar do tour", function () { cenas.splice(i, 1); mexeu = true; desenhar(); });
+      d.appendChild(nome); d.appendChild(acoes);
+      li.appendChild(img); li.appendChild(d); ol.appendChild(li);
+    });
+    resumo();
+  }
+  function resumo() {
+    $("rodape").classList.toggle("escondido", !imovel || !cenas.length);
+    $("resumo").textContent = cenas.length + " ambiente(s)" + (mexeu ? " · alterações não publicadas" : " · publicado");
+    $("publicar").disabled = !mexeu;
+  }
+
+  // Marcar porta: toque (sem arrastar) no panorama grava yaw/pitch.
+  var visor = null, alvo = null, inicio = null;
+  function marcarPorta(c) {
+    if (!window.pannellum) return msg("msg-painel", "Visualizador indisponível; verifique a internet.", "erro");
+    alvo = c; $("modal").classList.add("aberto");
+    $("modal-texto").textContent = "Toque na porta que leva ao próximo ambiente." + (c.porta ? " (já marcada)" : "");
+    if (visor) visor.destroy();
+    visor = pannellum.viewer("visor", { type: "equirectangular", panorama: c.url, autoLoad: true, showControls: false,
+      yaw: c.porta ? c.porta.yaw : 0, pitch: c.porta ? c.porta.pitch : 0,
+      hotSpots: c.porta ? [{ id: "porta", pitch: c.porta.pitch, yaw: c.porta.yaw, type: "info", text: "Porta" }] : [] });
+    visor.on("mousedown", function (e) { inicio = [e.clientX, e.clientY]; });
+    visor.on("touchstart", function (e) { var t = e.touches && e.touches[0]; if (t) inicio = [t.clientX, t.clientY]; });
+    function soltar(x, y, ev) {
+      if (!inicio || Math.hypot(x - inicio[0], y - inicio[1]) > 8) return;
+      var p = visor.mouseEventToCoords(ev);
+      alvo.porta = { pitch: Math.round(p[0] * 10) / 10, yaw: Math.round(p[1] * 10) / 10 };
+      try { visor.removeHotSpot("porta"); } catch (e) {}
+      visor.addHotSpot({ id: "porta", pitch: alvo.porta.pitch, yaw: alvo.porta.yaw, type: "info", text: "Porta" });
+      $("modal-texto").textContent = "Porta marcada. Toque em Concluir (ou toque em outro ponto para corrigir).";
+      mexeu = true;
+    }
+    visor.on("mouseup", function (e) { soltar(e.clientX, e.clientY, e); });
+    visor.on("touchend", function (e) { var t = e.changedTouches && e.changedTouches[0]; if (t) soltar(t.clientX, t.clientY, t); });
+  }
+  $("fechar").addEventListener("click", function () { $("modal").classList.remove("aberto"); if (visor) { visor.destroy(); visor = null; } desenhar(); });
+
+  $("publicar").addEventListener("click", function () {
+    var acesso = $("acesso").value.trim(), novas = cenas.filter(function (c) { return c.blob; });
+    $("publicar").disabled = true;
+    msg("msg-painel", novas.length ? "Enviando 0 de " + novas.length + "…" : "Publicando…");
+    var passo = novas.length ? chamar({ acao: "assinar", imovel: imovel, acesso: acesso, quantidade: novas.length }).then(function (j) {
+      var feitos = 0;
+      return Promise.all(j.envios.map(function (e, k) {
+        var url = /^https?:/.test(e.url) ? e.url : API + "/storage/v1" + e.url;
+        return fetch(url, { method: "PUT", headers: { "Content-Type": "image/jpeg", "x-upsert": "true" }, body: novas[k].blob }).then(function (r) {
+          if (!r.ok) throw new Error("Falha ao enviar a foto " + (k + 1) + " (" + r.status + ")");
+          novas[k].caminho = e.caminho; feitos++;
+          msg("msg-painel", "Enviando " + feitos + " de " + novas.length + "…");
+        });
+      }));
+    }) : Promise.resolve();
+    passo.then(function () {
+      return chamar({ acao: "publicar", imovel: imovel, acesso: acesso, cenas: cenas.map(function (c) { return { caminho: c.caminho, nome: c.nome, porta: c.porta }; }) });
+    }).then(function (j) {
+      cenas.forEach(function (c) { if (c.blob) { c.blob = null; } });
+      mexeu = false; desenhar(); $("remover").classList.remove("escondido");
+      var el = $("msg-painel"); el.className = "msg ok"; el.textContent = "Publicado! Em até 10 minutos o tour entra no anúncio: ";
+      var a = document.createElement("a"); a.href = j.link; a.textContent = j.link; a.target = "_blank"; a.rel = "noopener"; el.appendChild(a);
+    }).catch(function (e) { msg("msg-painel", e.message, "erro"); $("publicar").disabled = false; });
+  });
+
+  $("remover").addEventListener("click", function () {
+    if (!confirm("Apagar o tour do imóvel " + imovel + "? O link sai do anúncio na próxima atualização.")) return;
+    chamar({ acao: "remover", imovel: imovel, acesso: $("acesso").value.trim() }).then(function () {
+      cenas = []; mexeu = false; desenhar(); $("remover").classList.add("escondido"); msg("msg-painel", "Tour apagado.", "ok");
+    }).catch(function (e) { msg("msg-painel", e.message, "erro"); });
+  });
+
+  window.addEventListener("beforeunload", function (e) { if (mexeu) { e.preventDefault(); e.returnValue = ""; } });
+})();
+</script>
+</body>
+</html>
