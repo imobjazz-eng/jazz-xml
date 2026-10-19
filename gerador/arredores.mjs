@@ -27,6 +27,7 @@ export const RAIO_M = 1000;
 const RETENTAR_DIAS = 7;
 const RENOVAR_DIAS = 180;
 const MAX_ITENS = 5;
+const VERSAO = 2;
 
 /** Tipo do lugar → como aparece na descrição. A ordem desempata a distância. */
 export const TIPOS = [
@@ -100,7 +101,7 @@ const sem = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 /** "supermercado Dia (300 m)"; o tipo só entra se o nome não o disser. */
 export function textoDoLugar([tipo, nome, metros]) {
   const raiz = sem(tipo).slice(0, 5);
-  const diz = sem(nome).includes(raiz) || (tipo === "farmácia" && /drog/i.test(nome)) || (tipo === "escola" && /col[eé]gio|e\.?\s?e\.?\b|emef|creche/i.test(nome)) || (tipo === "faculdade" && /universidade|fatec|instituto|unesp|unicamp|usp\b|ita\b|unifesp|univap|unip\b/i.test(nome));
+  const diz = sem(nome).includes(raiz) || (tipo === "farmácia" && /drog/i.test(nome)) || (tipo === "escola" && /col[eé]gio|e\.?\s?e\.?\b|emef|creche/i.test(nome)) || (tipo === "parque" && /^(pra[çc]a|largo|bosque|horto|jardim bot[âa]nico|lago)\b/i.test(nome)) || (tipo === "faculdade" && /universidade|fatec|instituto|unesp|unicamp|usp\b|ita\b|unifesp|univap|unip\b/i.test(nome));
   const dist = metros >= 1000 ? `${(metros / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} km` : `${metros} m`;
   return `${diz ? nome : `${tipo} ${nome}`} (${dist})`;
 }
@@ -115,6 +116,8 @@ export function linhaArredores(itens) {
 
 export function precisaConsultar(entrada, agora = new Date()) {
   if (!entrada) return true;
+  // Antes da versão 2 a resposta cortada do Overpass entrava no cache.
+  if (entrada.s === "ok" && entrada.v !== VERSAO) return true;
   const dias = (agora - new Date(entrada.t)) / 86_400_000;
   return entrada.s === "ok" ? !(dias < RENOVAR_DIAS) : !(dias < RETENTAR_DIAS);
 }
@@ -124,7 +127,7 @@ export function precisaConsultar(entrada, agora = new Date()) {
  * grava no `cache` (chave → {s, i, t}). Erro de rede não derruba o feed: para
  * e segue com o que já tem.
  */
-export async function buscarArredores(coordenadas, cache, { limite = 40, intervaloMs = 1500, tempoMs = 120_000, agora = new Date(), url = OVERPASS, baixar = fetch } = {}) {
+export async function buscarArredores(coordenadas, cache, { limite = 20, intervaloMs = 4000, tempoMs = 120_000, agora = new Date(), url = OVERPASS, baixar = fetch } = {}) {
   const vistas = new Set();
   const pendentes = [];
   for (const { lat, lon } of coordenadas) {
@@ -152,7 +155,11 @@ export async function buscarArredores(coordenadas, cache, { limite = 40, interva
             signal: AbortSignal.timeout(30_000),
           });
           if (!r.ok) throw new Error(`HTTP ${r.status}`);
-          resposta = await r.json();
+          const json = await r.json();
+          // Overpass sobrecarregado devolve 200 com resposta cortada e um
+          // "remark" de erro: lista parcial não serve (faltariam lugares).
+          if (json?.remark && /error|timeout|runtime/i.test(json.remark)) throw new Error(`resposta cortada (${String(json.remark).slice(0, 80)})`);
+          resposta = json;
           break;
         } catch (err) {
           erros.push(`${new URL(servidor).host}: ${err.message}`);
@@ -160,7 +167,7 @@ export async function buscarArredores(coordenadas, cache, { limite = 40, interva
       }
       if (!resposta) throw new Error(`Overpass sem resposta (${erros.join("; ")})`);
       const itens = escolherArredores(p.lat, p.lon, resposta.elements);
-      cache[p.chave] = { s: "ok", i: itens, t: hoje(agora) };
+      cache[p.chave] = { s: "ok", v: VERSAO, i: itens, t: hoje(agora) };
       if (itens.length) resumo.comLugares++;
     } catch (err) {
       resumo.erro = err.message;

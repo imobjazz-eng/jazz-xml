@@ -17,7 +17,7 @@
  *   ARREDORES_CACHE pontos de interesse da execução anterior (JSON); o
  *                   atualizado é gravado como arredores.json ao lado do XML
  *   ARREDORES_LIMITE quadras novas consultadas no Overpass por execução
- *                   (padrão 40; "0" não consulta, só usa o cache)
+ *                   (padrão 20; "0" não consulta, só usa o cache)
  *   VIDEOS_URL      lista "código → link do YouTube" publicada pelo
  *                   repositório de vídeos (padrão: imobjazz-eng/jazz-videos)
  *   ANTIGO_CACHE    dados do XML anterior (antigo.json do gh-pages); sem ele,
@@ -227,8 +227,8 @@ try {
         if (codigo && Number.isFinite(lat) && Number.isFinite(lon) && lat && lon) coordenadas.set(codigo.trim(), { lat, lon });
       }
       const ar = await buscarArredores([...coordenadas.values()], arredores, {
-        limite: numero(process.env.ARREDORES_LIMITE, 40),
-        intervaloMs: numero(process.env.ARREDORES_INTERVALO_MS, 1500),
+        limite: numero(process.env.ARREDORES_LIMITE, 20),
+        intervaloMs: numero(process.env.ARREDORES_INTERVALO_MS, 4000),
       });
       console.log(`Arredores: ${ar.pendentes} quadras pendentes, ${ar.consultados} consultadas, ${ar.comLugares} com lugares.`);
       if (ar.erro) aviso(`Arredores interrompidos: ${ar.erro}`);

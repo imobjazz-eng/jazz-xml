@@ -431,18 +431,25 @@ console.log("arredores.mjs — pontos de interesse perto do imóvel");
   ok("o mais perto de cada tipo, do mais perto ao mais longe, sem nome de contato nem tipo fora da lista",
     JSON.stringify(itens) === JSON.stringify([["farmácia", "Drogasil", 100], ["supermercado", "Dia", 100], ["escola", "E.E. Professor Jorge", 500], ["parque", "Parque da Cidade", 1100]]), JSON.stringify(itens));
   ok("linha da descrição: tipo só quando o nome não diz", linhaArredores(itens) === "Perto do imóvel (distância em linha reta): Drogasil (100 m), supermercado Dia (100 m), E.E. Professor Jorge (500 m) e Parque da Cidade (1,1 km).", linhaArredores(itens));
+  ok("praça e largo não ganham \"parque\" na frente", linhaArredores([["parque", "Praça Rodolfo Arrua", 600]]) === "Perto do imóvel (distância em linha reta): Praça Rodolfo Arrua (600 m).");
+  {
+    const c3 = {};
+    const r3 = await buscarArredores([{ lat: -23.6, lon: -46.6 }], c3, { intervaloMs: 0, url: "https://a.exemplo/api",
+      baixar: async () => ({ ok: true, status: 200, json: async () => ({ remark: "runtime error: Query timed out in \"query\" at line 3 after 21 seconds.", elements: [{ lat: -23.6, lon: -46.6, tags: { leisure: "park", name: "Praça X" } }] }) }) });
+    ok("resposta cortada do Overpass (remark de erro) não vai para o cache", /cortada/.test(r3.erro) && !c3["-23.600,-46.600"], JSON.stringify(r3));
+  }
   ok("sem lugares, sem linha", linhaArredores([]) === "" && linhaArredores(null) === "");
   const a2 = { ...anuncio, arredores: [["supermercado", "Dia", 300]] };
   ok("a linha entra na ficha, antes do fecho", /Diferenciais: .*\n\nPerto do imóvel \(distância em linha reta\): supermercado Dia \(300 m\)\.\n\n.* à venda no Centro, Campinas\/SP\.$/.test(fichaDoImovel(a2)), fichaDoImovel(a2));
-  ok("quadra: renova em 180 dias, falha tenta de novo em 7",
-    !precisaArredores({ s: "ok", t: "2026-06-01" }, new Date("2026-10-01")) && precisaArredores({ s: "ok", t: "2026-01-01" }, new Date("2026-10-01")) && precisaArredores({ s: "erro", t: "2026-09-20" }, new Date("2026-10-01")));
+  ok("quadra: renova em 180 dias (e a gravada antes da versão 2), falha tenta de novo em 7", precisaArredores({ s: "ok", t: "2026-10-19" }, new Date("2026-10-19")) &&
+    !precisaArredores({ s: "ok", v: 2, t: "2026-06-01" }, new Date("2026-10-01")) && precisaArredores({ s: "ok", v: 2, t: "2026-01-01" }, new Date("2026-10-01")) && precisaArredores({ s: "erro", t: "2026-09-20" }, new Date("2026-10-01")));
   const pedidos = [];
   const baixar = async (url, init) => {
     pedidos.push(init.body);
     if (pedidos.length === 3) throw new Error("rede caiu");
     return { ok: true, status: 200, json: async () => ({ elements: [el(-23.2, -45.9, { shop: "supermarket", name: "Dia" })] }) };
   };
-  const c = { "-23.100,-45.100": { s: "ok", i: [["escola", "X", 200]], t: "2026-10-01" } };
+  const c = { "-23.100,-45.100": { s: "ok", v: 2, i: [["escola", "X", 200]], t: "2026-10-01" } };
   const coords = [{ lat: -23.2001, lon: -45.9001 }, { lat: -23.2002, lon: -45.9002 }, { lat: -23.3, lon: -45.9 }, { lat: -23.1, lon: -45.1 }, { lat: -23.4, lon: -45.9 }];
   const r = await buscarArredores(coords, c, { intervaloMs: 0, agora: new Date("2026-10-19"), baixar, url: "https://um.exemplo/api" });
   ok("uma consulta por quadra, nada do que já está no cache; erro de rede para sem derrubar",
