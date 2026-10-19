@@ -35,7 +35,12 @@ const RE_EMOJI = /[\u{1F000}-\u{1FFFF}\u{2190}-\u{2BFF}\u{FE0F}\u{2600}-\u{27BF}
 const RE_FONE = /(?:\+?55[\s.-]?)?\(?\d{2}\)?[\s.-]?9?[\s.-]?\d{4}[\s.-]?\d{4}/;
 const RE_URL = /https?:\/\/\S+|www\.\S+/i;
 const RE_EMAIL = /[\w.+-]+@[\w-]+\.[\w.]+/;
-const RE_CONTATO = new RegExp(`${RE_FONE.source}|${RE_URL.source}|${RE_EMAIL.source}`, "i");
+// Canal de contato fora do portal citado por nome (WhatsApp, "pelo telefone",
+// formulário) e texto modelo esquecido ("[Seu Telefone/Link]", "[Inserir
+// Valor]", "Meta descrição para o site"): o Canal Pro pede descrição sem
+// dados de contato e com informação do imóvel, não do anúncio.
+const RE_CANAL = /\bwhats\s?app\b|\bwhats\b|\bwpp\b|\b(?:pelo|por|via|ou|nosso|seu) telefone\b|\bligue\b|\bligar (?:para|antecipadamente|agora)\b|\bformul[áa]rio\b|\bmeta descri[çc][ãa]o\b|\[[^\]\n]{2,60}\]/i;
+const RE_CONTATO = new RegExp(`${RE_FONE.source}|${RE_URL.source}|${RE_EMAIL.source}|${RE_CANAL.source}`, "i");
 const MAIUSCULA = "A-ZÁÉÍÓÚÂÊÔÃÕÇÀÜ";
 const RE_PALAVRA_CAIXA_ALTA = new RegExp(`\\b[${MAIUSCULA}]{4,}\\b`, "g");
 
@@ -397,6 +402,9 @@ export function restauradorDeNomes(nomes) {
 
 export function enriquecerDescricao(descricao, a, { curta = DESCRICAO_CURTA, max = DESCRICAO_MAX, restaurarNomes = (t) => t } = {}) {
   let t = semMarcacao(decodificarEntidades(semHtml(descricao)).replace(/\r\n?/g, "\n").replace(RE_EMOJI, ""));
+  // "?" solto entre palavras é travessão ou emoji que o Vista não gravou
+  // ("Jardim Aquarius ? Agende"): vira travessão, e a frase não se parte ali.
+  t = t.replace(/(\p{L}) \? (?=\p{Lu})/gu, "$1 – ");
 
   // Contato fora do portal é proibido: sai a frase inteira que o contém.
   t = t
