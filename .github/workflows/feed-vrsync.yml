@@ -129,7 +129,7 @@ jobs:
           ANTIGO_CACHE: cache/antigo.json
           GEOCODE_CACHE: cache/geocode.json
           ARREDORES_CACHE: cache/arredores.json
-          ARREDORES_LIMITE: ${{ vars.ARREDORES_LIMITE || '40' }} # quadras novas por execução
+          ARREDORES_LIMITE: ${{ vars.ARREDORES_LIMITE || '20' }} # quadras novas por execução
           GEO_LIMITE: ${{ vars.GEO_LIMITE || '35' }} # por execução; ~200 por hora
           VIDEOS_URL: ${{ vars.VIDEOS_URL }}
           VIDEO_PADRAO: ${{ vars.VIDEO_PADRAO }}
