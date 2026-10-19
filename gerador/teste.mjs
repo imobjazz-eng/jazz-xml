@@ -123,9 +123,9 @@ ok("linha em maiúsculas vira frase, preservando sigla e nome", d.texto === "Cas
 d = enriquecerDescricao("**Galpão no Centro**\n\n* Segurança 24h\n= Lazer completo\nFale com a imobiliária Jazz.com. Perto da Vila Bethânia.com permuta. Lar perfeito.Com piscina. Em Ubatuba.(400 m da praia). Área de 2.500 m², R$ 1.200,50 e site.com.br", anuncio, { curta: 0 });
 ok("Markdown e domínio colado saem da descrição",
   d.texto === "Galpão no Centro\n\n- Segurança 24h\n- Lazer completo\nFale com a imobiliária Jazz. Perto da Vila Bethânia. Com permuta. Lar perfeito. Com piscina. Em Ubatuba. (400 m da praia). Área de 2.500 m², R$ 1.200,50 e site.com.br", d.texto);
-d = enriquecerDescricao("Casa ampla no Jardim Aquarius ? Ótima vista. Agende sua visita pelo Whatsapp: [Seu Telefone/Link] Unidade exclusiva. Entre em contato via WhatsApp ou telefone para agendar. Valor: [Inserir Valor] mensais. Meta descrição para o site(168) Casa à venda. Ponto de telefone na sala. Quintal grande.", anuncio, { curta: 0 });
+d = enriquecerDescricao("Casa ampla no Jardim Aquarius ? Ótima vista. Agende sua visita pelo Whatsapp: [Seu Telefone/Link] Unidade exclusiva. Entre em contato via WhatsApp ou telefone para agendar. Valor: [Inserir Valor] mensais. Meta descrição para o site(168) Casa à venda. Perto de tudo. [Inserir aqui os principais pontos de referência do bairro, como escolas, mercados e hospitais da região]. Ponto de telefone na sala. Quintal grande [área coberta].", anuncio, { curta: 0 });
 ok("canal de contato e texto modelo saem da descrição (frase inteira); \"?\" solto vira travessão",
-  d.texto === "Casa ampla no Jardim Aquarius – Ótima vista. Ponto de telefone na sala. Quintal grande.", d.texto);
+  d.texto === "Casa ampla no Jardim Aquarius – Ótima vista. Perto de tudo. Ponto de telefone na sala. Quintal grande [área coberta].", d.texto);
 d = enriquecerDescricao("Frase completa. ".repeat(250), anuncio);
 ok("descrição longa cortada em frase inteira (até 3000) e a ficha no fim, inteira", d.texto.length <= 3000 && d.ficha && /completa\.\n\nFicha do imóvel:/.test(d.texto) && d.texto.endsWith(fichaDoImovel(anuncio)), d.texto.length);
 d = enriquecerDescricao("Frase completa. ".repeat(250), anuncio, { curta: 900 });
