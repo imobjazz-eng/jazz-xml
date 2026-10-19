@@ -88,6 +88,18 @@ jobs:
             echo "Sem cache anterior: começando vazio"
           fi
 
+      # Pontos de interesse perto de cada imóvel (gerador/arredores.mjs): cada
+      # quadra é consultada no OpenStreetMap uma vez só.
+      - name: Recuperar cache de arredores
+        run: |
+          mkdir -p cache
+          if git fetch -q --depth=1 origin gh-pages 2>/dev/null && git show FETCH_HEAD:arredores.json > cache/arredores.json 2>/dev/null; then
+            echo "Arredores recuperados: $(wc -c < cache/arredores.json) bytes"
+          else
+            echo '{}' > cache/arredores.json
+            echo "Sem cache de arredores: começando vazio"
+          fi
+
       # Dados do XML anterior (número, ano, IPTU...): extraídos uma vez do
       # Worker congelado e guardados no gh-pages (ver gerador/antigo.mjs).
       - name: Recuperar dados do XML anterior
@@ -116,6 +128,8 @@ jobs:
           TOURS360_CACHE: cache/tour360
           ANTIGO_CACHE: cache/antigo.json
           GEOCODE_CACHE: cache/geocode.json
+          ARREDORES_CACHE: cache/arredores.json
+          ARREDORES_LIMITE: ${{ vars.ARREDORES_LIMITE || '40' }} # quadras novas por execução
           GEO_LIMITE: ${{ vars.GEO_LIMITE || '35' }} # por execução; ~200 por hora
           VIDEOS_URL: ${{ vars.VIDEOS_URL }}
           VIDEO_PADRAO: ${{ vars.VIDEO_PADRAO }}

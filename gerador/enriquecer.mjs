@@ -19,6 +19,7 @@
  *
  * NADA É INVENTADO: só reorganiza o que o anúncio já informa. Sem rede aqui.
  */
+import { linhaArredores } from "./arredores.mjs";
 import { separar } from "./espelho.mjs";
 import { inserirTour } from "./tour.mjs";
 
@@ -378,6 +379,10 @@ export function fichaDoImovel(a) {
   if (linhas.length) partes.push(["Ficha do imóvel:", ...linhas.map((l) => `- ${l}`)].join("\n"));
   const dif = [...new Set(a.diferenciais)];
   if (dif.length) partes.push(`Diferenciais: ${dif.join(", ")}.`);
+  // Pontos de interesse do mapa (arredores.mjs): a ajuda do Canal Pro pede
+  // que a descrição cite mercados, escolas e afins por perto.
+  const perto = linhaArredores(a.arredores);
+  if (perto) partes.push(perto);
   // Fecho como no XML anterior (100% em descrição no Canal Pro): tipo,
   // transação, bairro e cidade numa frase só, as palavras-chave da busca.
   const local = [a.bairro, a.cidade && (a.uf ? `${a.cidade}/${a.uf}` : a.cidade)].filter(Boolean).join(", ");
@@ -770,8 +775,10 @@ function trocarCdata(bloco, tag, texto) {
  * Enriquece um anúncio. `coordenadaDe(chave)` devolve {lat, lon} do cache de
  * geocodificação, ou null.
  */
-export function enriquecerAnuncio(bloco, { coordenadaDe = () => null, videoDe = () => null, tourDe = () => null, antigoDe = () => null, restaurarNomes } = {}) {
+export function enriquecerAnuncio(bloco, { coordenadaDe = () => null, videoDe = () => null, tourDe = () => null, antigoDe = () => null, arredoresDe = () => null, restaurarNomes } = {}) {
   const a = lerAnuncio(bloco);
+  const perto = a.codigo ? arredoresDe(a.codigo) : null;
+  if (perto) a.arredores = perto;
   const antigo = (a.codigo && antigoDe(a.codigo)) || {};
   const mudou = { titulo: false, descricao: false, ficha: false, coordenada_adicionada: false, coordenada_descartada: false, uso: false, video: false, tour: false };
   let b = bloco;

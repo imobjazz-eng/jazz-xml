@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import { ajustar, separar } from "./espelho.mjs";
 import { fichaDoImovel, enriquecerTitulo, enriquecerDescricao, enriquecerAnuncio, enriquecerFeed, enderecosSemCoordenada, chaveEndereco, lerAnuncio, usoDe, linkYoutubeValido, pendencias, planilhaPendencias } from "./enriquecer.mjs";
 import { escolherResultado, geocodificar, precisaConsultar, mesmaVia } from "./geocodificar.mjs";
+import { escolherArredores, linhaArredores, buscarArredores, arredoresDoCache, precisaConsultar as precisaArredores } from "./arredores.mjs";
 import { extrairAntigo } from "./antigo.mjs";
 import { paraChavesNaMao, imovelChavesNaMao } from "./chavesnamao.mjs";
 import { montarSaude } from "./saude.mjs";
@@ -414,6 +415,43 @@ ok("falha é tentada de novo só depois de 30 dias",
   globalThis.fetch = fetchOriginal;
 }
 
+console.log("arredores.mjs — pontos de interesse perto do imóvel");
+{
+  const el = (lat, lon, tags) => ({ lat, lon, tags });
+  const itens = escolherArredores(-23.2, -45.9, [
+    el(-23.203, -45.9, { shop: "supermarket", name: "Supermercado Shibata" }),
+    el(-23.201, -45.9, { shop: "supermarket", name: "Dia" }),
+    el(-23.2, -45.905, { amenity: "school", name: "E.E. Professor Jorge" }),
+    { type: "way", center: { lat: -23.21, lon: -45.9 }, tags: { leisure: "park", name: "Parque da Cidade" } },
+    el(-23.2005, -45.9, { amenity: "pharmacy", name: "Drogasil" }),
+    el(-23.2001, -45.9, { amenity: "bank", name: "Ligue (12) 3333-4444" }),
+    el(-23.2001, -45.9, { amenity: "restaurant", name: "Cantina" }),
+    el(-23.2002, -45.9, { amenity: "school" }),
+  ]);
+  ok("o mais perto de cada tipo, do mais perto ao mais longe, sem nome de contato nem tipo fora da lista",
+    JSON.stringify(itens) === JSON.stringify([["farmácia", "Drogasil", 100], ["supermercado", "Dia", 100], ["escola", "E.E. Professor Jorge", 500], ["parque", "Parque da Cidade", 1100]]), JSON.stringify(itens));
+  ok("linha da descrição: tipo só quando o nome não diz", linhaArredores(itens) === "Perto do imóvel (distância em linha reta): Drogasil (100 m), supermercado Dia (100 m), E.E. Professor Jorge (500 m) e Parque da Cidade (1,1 km).", linhaArredores(itens));
+  ok("sem lugares, sem linha", linhaArredores([]) === "" && linhaArredores(null) === "");
+  const a2 = { ...anuncio, arredores: [["supermercado", "Dia", 300]] };
+  ok("a linha entra na ficha, antes do fecho", /Diferenciais: .*\n\nPerto do imóvel \(distância em linha reta\): supermercado Dia \(300 m\)\.\n\n.* à venda no Centro, Campinas\/SP\.$/.test(fichaDoImovel(a2)), fichaDoImovel(a2));
+  ok("quadra: renova em 180 dias, falha tenta de novo em 7",
+    !precisaArredores({ s: "ok", t: "2026-06-01" }, new Date("2026-10-01")) && precisaArredores({ s: "ok", t: "2026-01-01" }, new Date("2026-10-01")) && precisaArredores({ s: "erro", t: "2026-09-20" }, new Date("2026-10-01")));
+  const pedidos = [];
+  const baixar = async (url, init) => {
+    pedidos.push(init.body);
+    if (pedidos.length === 3) throw new Error("rede caiu");
+    return { ok: true, status: 200, json: async () => ({ elements: [el(-23.2, -45.9, { shop: "supermarket", name: "Dia" })] }) };
+  };
+  const c = { "-23.100,-45.100": { s: "ok", i: [["escola", "X", 200]], t: "2026-10-01" } };
+  const coords = [{ lat: -23.2001, lon: -45.9001 }, { lat: -23.2002, lon: -45.9002 }, { lat: -23.3, lon: -45.9 }, { lat: -23.1, lon: -45.1 }, { lat: -23.4, lon: -45.9 }];
+  const r = await buscarArredores(coords, c, { intervaloMs: 0, agora: new Date("2026-10-19"), baixar });
+  ok("uma consulta por quadra, nada do que já está no cache; erro de rede para sem derrubar",
+    r.pendentes === 3 && pedidos.length === 3 && r.erro === "rede caiu" && c["-23.200,-45.900"]?.s === "ok" && c["-23.300,-45.900"]?.s === "ok" && !c["-23.400,-45.900"], JSON.stringify(r));
+  ok("consulta pelo cache", arredoresDoCache(c)(-23.2004, -45.9003)?.[0]?.[1] === "Dia" && arredoresDoCache(c)(-10, -40) === null);
+  const comPerto = enriquecerAnuncio(feed([["700", 8]]).match(/<Listing>[\s\S]*?<\/Listing>/)[0], { arredoresDe: () => [["escola", "Escola Viva", 400]] });
+  ok("anúncio: arredores entram na descrição", comPerto.bloco.includes("Perto do imóvel (distância em linha reta): Escola Viva (400 m)."), comPerto.bloco.slice(0, 300));
+}
+
 // Ponta a ponta: gerar.mjs com o Vista simulado.
 console.log("gerar.mjs");
 const dir = mkdtempSync(join(tmpdir(), "feed-"));
@@ -422,8 +460,12 @@ writeFileSync(falso, `
 import { readFileSync } from "node:fs";
 const xml = readFileSync(process.env.XML_FALSO, "utf8");
 const codigos = JSON.parse(process.env.CODIGOS_FALSOS || "null");
-globalThis.fetch = async (url) => {
+globalThis.fetch = async (url, init) => {
   url = String(url);
+  if (url.includes("overpass")) {
+    const [, lat, lon] = decodeURIComponent(String(init?.body)).match(/around:\d+,(-?[\d.]+),(-?[\d.]+)/) || [];
+    return { ok: true, status: 200, json: async () => ({ elements: [{ lat: Number(lat) + 0.002, lon: Number(lon), tags: { shop: "supermarket", name: "Mercado Teste" } }] }) };
+  }
   if (url.includes("/imoveis/listar")) {
     if (!codigos) return { ok: false, status: 500, json: async () => ({}) };
     const p = JSON.parse(new URL(url).searchParams.get("pesquisa")).paginacao;
@@ -454,6 +496,7 @@ const s1 = join(dir, "a", "vrsync.xml");
 ok("gera e grava", rodar({ XML_FALSO: arquivo(feed(muitos)), CODIGOS_FALSOS: JSON.stringify(codigos) }, s1) === 0 && existsSync(s1));
 ok("gravou os 120", existsSync(s1) && ids(readFileSync(s1, "utf8")).length === 120);
 ok("gravou o cache de geocodificação ao lado", existsSync(join(dir, "a", "geocode.json")));
+ok("gravou o cache de arredores ao lado", existsSync(join(dir, "a", "arredores.json")));
 ok("título enriquecido no arquivo final", readFileSync(s1, "utf8").includes("<Title><![CDATA["));
 ok("planilha de pendências gravada ao lado", existsSync(join(dir, "a", "pendencias.csv")));
 ok("chavesnamao.xml, imovelweb.xml e saude.json gravados ao lado", ["chavesnamao.xml", "imovelweb.xml", "saude.json"].every((f) => existsSync(join(dir, "a", f)))

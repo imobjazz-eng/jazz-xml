@@ -14,6 +14,10 @@
  *                   o atualizado é gravado como geocode.json ao lado do XML
  *   GEO_LIMITE      endereços novos consultados por execução (padrão 200)
  *   GEO_INTERVALO_MS pausa entre consultas ao Nominatim (padrão 1100)
+ *   ARREDORES_CACHE pontos de interesse da execução anterior (JSON); o
+ *                   atualizado é gravado como arredores.json ao lado do XML
+ *   ARREDORES_LIMITE quadras novas consultadas no Overpass por execução
+ *                   (padrão 40; "0" não consulta, só usa o cache)
  *   VIDEOS_URL      lista "código → link do YouTube" publicada pelo
  *                   repositório de vídeos (padrão: imobjazz-eng/jazz-videos)
  *   ANTIGO_CACHE    dados do XML anterior (antigo.json do gh-pages); sem ele,
@@ -38,6 +42,7 @@ import { enriquecerFeed, enderecosSemCoordenada, planilhaPendencias, linkYoutube
 import { TOUR_BASE, TOUR_MIN_FOTOS, codigoDoTour, dadosDoTour, linkDoTour } from "./tour.mjs";
 import { TOUR360_BASE, lerTours360, linkDoTour360, publicarTours360, carregarToursRemotos } from "./tour360.mjs";
 import { geocodificar, consultaCache } from "./geocodificar.mjs";
+import { buscarArredores, arredoresDoCache } from "./arredores.mjs";
 import { ANTIGO_URL, extrairAntigo } from "./antigo.mjs";
 import { paraChavesNaMao } from "./chavesnamao.mjs";
 import { paraImovelWeb } from "./imovelweb.mjs";
@@ -139,6 +144,15 @@ try {
   console.log(`Geocodificação: ${geo.pendentes} endereços pendentes, ${geo.consultados} consultados, ${geo.achados} achados.`, geo.falhas);
   if (geo.erro) aviso(`Geocodificação interrompida: ${geo.erro}`);
 
+  let arredores = {};
+  if (process.env.ARREDORES_CACHE) {
+    try {
+      arredores = JSON.parse(await readFile(process.env.ARREDORES_CACHE, "utf8"));
+    } catch {
+      console.log("Cache de arredores ausente ou ilegível: começando vazio.");
+    }
+  }
+
   // Enriquecimento com defeito não derruba o feed: publica o XML sem ele.
   let e;
   const tours = new Map();
@@ -199,7 +213,34 @@ try {
       const api = r.enderecos?.get(c);
       return antigo[c] || api ? { ...antigo[c], ...api } : null;
     };
-    e = enriquecerFeed(r.xml, { coordenadaDe: consultaCache(cache), videoDe, tourDe, antigoDe });
+    const opcoes = { coordenadaDe: consultaCache(cache), videoDe, tourDe, antigoDe };
+    e = enriquecerFeed(r.xml, opcoes);
+    // Pontos de interesse perto do imóvel (arredores.mjs): precisam da
+    // coordenada final de cada anúncio, que só existe depois da primeira
+    // passada; com eles, a descrição é refeita. Falha aqui fica no aviso.
+    try {
+      const coordenadas = new Map();
+      for (const [, bloco] of e.xml.matchAll(/<Listing>([\s\S]*?)<\/Listing>/g)) {
+        const codigo = (bloco.match(/<ListingID>([^<]+)<\/ListingID>/) || [])[1];
+        const lat = Number((bloco.match(/<Latitude>([^<]+)<\/Latitude>/) || [])[1]);
+        const lon = Number((bloco.match(/<Longitude>([^<]+)<\/Longitude>/) || [])[1]);
+        if (codigo && Number.isFinite(lat) && Number.isFinite(lon) && lat && lon) coordenadas.set(codigo.trim(), { lat, lon });
+      }
+      const ar = await buscarArredores([...coordenadas.values()], arredores, {
+        limite: numero(process.env.ARREDORES_LIMITE, 40),
+        intervaloMs: numero(process.env.ARREDORES_INTERVALO_MS, 1500),
+      });
+      console.log(`Arredores: ${ar.pendentes} quadras pendentes, ${ar.consultados} consultadas, ${ar.comLugares} com lugares.`);
+      if (ar.erro) aviso(`Arredores interrompidos: ${ar.erro}`);
+      const doCache = arredoresDoCache(arredores);
+      const arredoresDe = (c) => {
+        const p = coordenadas.get(c);
+        return p ? doCache(p.lat, p.lon) : null;
+      };
+      e = enriquecerFeed(r.xml, { ...opcoes, arredoresDe });
+    } catch (err) {
+      aviso(`Arredores não aplicados: ${err.message}`);
+    }
     console.log("Enriquecimento (anúncios alterados):", e.resumo);
   } catch (err) {
     enriquecimentoOk = false;
@@ -212,6 +253,7 @@ try {
   await mkdir(dirname(destino), { recursive: true });
   await writeFile(destino, e.xml);
   await writeFile(join(dirname(destino), "geocode.json"), JSON.stringify(cache));
+  await writeFile(join(dirname(destino), "arredores.json"), JSON.stringify(arredores));
   if (Object.keys(antigo).length) await writeFile(join(dirname(destino), "antigo.json"), JSON.stringify(antigo));
   if (tours.size) {
     const pasta = join(dirname(destino), "tour", "d");
