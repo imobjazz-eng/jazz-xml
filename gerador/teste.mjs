@@ -444,9 +444,14 @@ console.log("arredores.mjs — pontos de interesse perto do imóvel");
   };
   const c = { "-23.100,-45.100": { s: "ok", i: [["escola", "X", 200]], t: "2026-10-01" } };
   const coords = [{ lat: -23.2001, lon: -45.9001 }, { lat: -23.2002, lon: -45.9002 }, { lat: -23.3, lon: -45.9 }, { lat: -23.1, lon: -45.1 }, { lat: -23.4, lon: -45.9 }];
-  const r = await buscarArredores(coords, c, { intervaloMs: 0, agora: new Date("2026-10-19"), baixar });
+  const r = await buscarArredores(coords, c, { intervaloMs: 0, agora: new Date("2026-10-19"), baixar, url: "https://um.exemplo/api" });
   ok("uma consulta por quadra, nada do que já está no cache; erro de rede para sem derrubar",
-    r.pendentes === 3 && pedidos.length === 3 && r.erro === "rede caiu" && c["-23.200,-45.900"]?.s === "ok" && c["-23.300,-45.900"]?.s === "ok" && !c["-23.400,-45.900"], JSON.stringify(r));
+    r.pendentes === 3 && pedidos.length === 3 && /rede caiu/.test(r.erro) && c["-23.200,-45.900"]?.s === "ok" && c["-23.300,-45.900"]?.s === "ok" && !c["-23.400,-45.900"], JSON.stringify(r));
+  const tentados = [];
+  const c2 = {};
+  const r2 = await buscarArredores([{ lat: -23.5, lon: -46.6 }], c2, { intervaloMs: 0, url: ["https://a.exemplo/api", "https://b.exemplo/api"],
+    baixar: async (u) => { tentados.push(new URL(u).host); if (u.includes("a.exemplo")) throw new Error("demorou"); return { ok: true, status: 200, json: async () => ({ elements: [] }) }; } });
+  ok("servidor que não responde: tenta o próximo para o mesmo pedido", tentados.join() === "a.exemplo,b.exemplo" && !r2.erro && c2["-23.500,-46.600"]?.s === "ok", JSON.stringify({ tentados, r2 }));
   ok("consulta pelo cache", arredoresDoCache(c)(-23.2004, -45.9003)?.[0]?.[1] === "Dia" && arredoresDoCache(c)(-10, -40) === null);
   const comPerto = enriquecerAnuncio(feed([["700", 8]]).match(/<Listing>[\s\S]*?<\/Listing>/)[0], { arredoresDe: () => [["escola", "Escola Viva", 400]] });
   ok("anúncio: arredores entram na descrição", comPerto.bloco.includes("Perto do imóvel (distância em linha reta): Escola Viva (400 m)."), comPerto.bloco.slice(0, 300));

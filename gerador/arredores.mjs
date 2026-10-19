@@ -15,9 +15,15 @@
  * identificado e cache por quadra (~110 m). O cache fica publicado ao lado do
  * XML (arredores.json) e volta a cada execução, como o geocode.json.
  */
-export const OVERPASS = "https://overpass-api.de/api/interpreter";
+// Servidores públicos do Overpass, na ordem: se um não responde, tenta o
+// próximo para o mesmo pedido.
+export const OVERPASS = [
+  "https://overpass-api.de/api/interpreter",
+  "https://overpass.kumi.systems/api/interpreter",
+  "https://overpass.private.coffee/api/interpreter",
+];
 const USER_AGENT = "jazz-xml-feed/1.0 (+https://github.com/imobjazz-eng/jazz-xml)";
-export const RAIO_M = 1500;
+export const RAIO_M = 1000;
 const RETENTAR_DIAS = 7;
 const RENOVAR_DIAS = 180;
 const MAX_ITENS = 5;
@@ -53,7 +59,7 @@ export function consultaOverpass(lat, lon, raio = RAIO_M) {
   const grupos = new Map();
   for (const t of TIPOS) grupos.set(t.chave, [...(grupos.get(t.chave) || []), t.valor]);
   const linhas = [...grupos].map(([k, vs]) => `  nwr(around:${raio},${lat},${lon})["${k}"~"^(${vs.join("|")})$"]["name"];`);
-  return `[out:json][timeout:25];\n(\n${linhas.join("\n")}\n);\nout center tags;`;
+  return `[out:json][timeout:20];\n(\n${linhas.join("\n")}\n);\nout center tags;`;
 }
 
 /** Nome que pode ir para a descrição: curto, sem contato nem marcação. */
@@ -134,14 +140,26 @@ export async function buscarArredores(coordenadas, cache, { limite = 40, interva
     try {
       if (resumo.consultados > 0) await espera(intervaloMs);
       resumo.consultados++;
-      const r = await baixar(url, {
-        method: "POST",
-        headers: { "User-Agent": USER_AGENT, "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ data: consultaOverpass(p.lat, p.lon) }).toString(),
-        signal: AbortSignal.timeout(40_000),
-      });
-      if (!r.ok) throw new Error(`Overpass HTTP ${r.status}`);
-      const itens = escolherArredores(p.lat, p.lon, (await r.json()).elements);
+      const corpo = new URLSearchParams({ data: consultaOverpass(p.lat, p.lon) }).toString();
+      let resposta = null;
+      const erros = [];
+      for (const servidor of [url].flat()) {
+        try {
+          const r = await baixar(servidor, {
+            method: "POST",
+            headers: { "User-Agent": USER_AGENT, "Content-Type": "application/x-www-form-urlencoded" },
+            body: corpo,
+            signal: AbortSignal.timeout(30_000),
+          });
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          resposta = await r.json();
+          break;
+        } catch (err) {
+          erros.push(`${new URL(servidor).host}: ${err.message}`);
+        }
+      }
+      if (!resposta) throw new Error(`Overpass sem resposta (${erros.join("; ")})`);
+      const itens = escolherArredores(p.lat, p.lon, resposta.elements);
       cache[p.chave] = { s: "ok", i: itens, t: hoje(agora) };
       if (itens.length) resumo.comLugares++;
     } catch (err) {
