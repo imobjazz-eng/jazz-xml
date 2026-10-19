@@ -39,7 +39,7 @@ const RE_EMAIL = /[\w.+-]+@[\w-]+\.[\w.]+/;
 // formulário) e texto modelo esquecido ("[Seu Telefone/Link]", "[Inserir
 // Valor]", "Meta descrição para o site"): o Canal Pro pede descrição sem
 // dados de contato e com informação do imóvel, não do anúncio.
-const RE_CANAL = /\bwhats\s?app\b|\bwhats\b|\bwpp\b|\b(?:pelo|por|via|ou|nosso|seu) telefone\b|\bligue\b|\bligar (?:para|antecipadamente|agora)\b|\bformul[áa]rio\b|\bmeta descri[çc][ãa]o\b|\[[^\]\n]{2,60}\]/i;
+const RE_CANAL = /\bwhats\s?app\b|\bwhats\b|\bwpp\b|\b(?:pelo|por|via|ou|nosso|seu) telefone\b|\bligue\b|\bligar (?:para|antecipadamente|agora)\b|\bformul[áa]rio\b|\bmeta descri[çc][ãa]o\b|\[[^\]\n]{0,200}\b(?:inserir|insira|seu|sua|link|telefone|contato|valor|aqui|xx+)\b[^\]\n]{0,200}\]/i;
 const RE_CONTATO = new RegExp(`${RE_FONE.source}|${RE_URL.source}|${RE_EMAIL.source}|${RE_CANAL.source}`, "i");
 const MAIUSCULA = "A-ZÁÉÍÓÚÂÊÔÃÕÇÀÜ";
 const RE_PALAVRA_CAIXA_ALTA = new RegExp(`\\b[${MAIUSCULA}]{4,}\\b`, "g");
