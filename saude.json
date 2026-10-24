@@ -1,0 +1,510 @@
+{
+ "geradoEm": "2026-10-24T18:54:01.119Z",
+ "commit": "8135277",
+ "geral": "amarelo",
+ "etapas": [
+  {
+   "id": "vista",
+   "nome": "Vista: arquivo de imóveis",
+   "status": "verde",
+   "resumo": "3579 imóveis no XML do Vista",
+   "detalhe": "Base de tudo: fotos, características e preços vêm do Vista."
+  },
+  {
+   "id": "api",
+   "nome": "Vista: imóveis ativos (tempo real)",
+   "status": "verde",
+   "resumo": "4815 imóveis ativos na API",
+   "detalhe": "Imóvel desativado no Vista sai dos portais na geração seguinte (a cada 10 minutos)."
+  },
+  {
+   "id": "selecao",
+   "nome": "Seleção dos anúncios",
+   "status": "verde",
+   "resumo": "3000 de 3000 anúncios",
+   "detalhe": "Fora: 277 com poucas fotos, 299 acima do limite, 3 com preço fora do padrão, 0 inativos no Vista."
+  },
+  {
+   "id": "enriquecimento",
+   "nome": "Enriquecimento dos dados",
+   "status": "verde",
+   "resumo": "Título, descrição com ficha, endereço, IPTU, ano e características",
+   "detalhe": "Mesmo enriquecimento para todos os portais."
+  },
+  {
+   "id": "endereco",
+   "nome": "Endereço completo",
+   "status": "amarelo",
+   "resumo": "100% com número · 92.7% com coordenada",
+   "detalhe": "0 sem número, 220 sem coordenada. Endereço vale 35 pontos no Canal Pro."
+  },
+  {
+   "id": "descricao",
+   "nome": "Descrição",
+   "status": "verde",
+   "resumo": "100% com descrição completa",
+   "detalhe": "Descrição vale 25 pontos no Canal Pro."
+  },
+  {
+   "id": "fotos",
+   "nome": "Fotos",
+   "status": "amarelo",
+   "resumo": "510 anúncios com menos de 16 fotos",
+   "detalhe": "931 com menos de 20. Só se resolve cadastrando fotos no Vista (vale 20 pontos)."
+  },
+  {
+   "id": "video",
+   "nome": "Vídeo",
+   "status": "verde",
+   "resumo": "100% com vídeo",
+   "detalhe": "Vídeo do YouTube (vale 3 pontos)."
+  },
+  {
+   "id": "tour",
+   "nome": "Tour virtual",
+   "status": "amarelo",
+   "resumo": "100% com tour de fotos · 0 com tour 360",
+   "detalhe": "O Canal Pro só contou tour 360 até agora. Envio de fotos 360 pelo celular: funcionando. Tour vale 4 pontos."
+  }
+ ],
+ "canais": [
+  {
+   "id": "zap",
+   "nome": "Grupo ZAP (ZAP Imóveis, VivaReal, OLX)",
+   "arquivo": "vrsync.xml",
+   "statusArquivo": "verde",
+   "resumo": "3000 anúncios · 23.3 MB",
+   "leitura": "O portal lê várias vezes ao dia.",
+   "ativacao": {
+    "status": "verde",
+    "texto": "Integração ativa no portal"
+   },
+   "status": "amarelo"
+  },
+  {
+   "id": "chavesnamao",
+   "nome": "Chaves na Mão",
+   "arquivo": "chavesnamao.xml",
+   "statusArquivo": "verde",
+   "resumo": "3000 imóveis",
+   "leitura": "O portal lê uma vez por dia.",
+   "ativacao": {
+    "status": "amarelo",
+    "texto": "Aguardando ativação no portal"
+   },
+   "status": "amarelo"
+  },
+  {
+   "id": "imovelweb",
+   "nome": "ImovelWeb (Wimoveis, Casa Mineira)",
+   "arquivo": "imovelweb.xml",
+   "statusArquivo": "amarelo",
+   "resumo": "2887 imóveis · 113 sem campo obrigatório do portal · falta o código da Jazz no portal",
+   "leitura": "O portal lê uma vez por dia.",
+   "ativacao": {
+    "status": "amarelo",
+    "texto": "Aguardando ativação no portal"
+   },
+   "status": "amarelo"
+  }
+ ],
+ "portais": [
+  {
+   "nome": "Grupo OLX: ZAP Imóveis, VivaReal e OLX",
+   "grupo": "Um só arquivo (Canal Pro)",
+   "audiencia": "~15 mi visitas/mês cada · ZAP 1º",
+   "formato": "VRSync",
+   "prioridade": "Alta",
+   "motivo": "Maior grupo do país, forte em SP; inclui o público popular e de litoral da OLX",
+   "etapas": {
+    "documentacao": {
+     "status": "verde",
+     "texto": "Oficial"
+    },
+    "vista": {
+     "status": "verde",
+     "texto": "Integrado ao Vista"
+    },
+    "dados": {
+     "status": "amarelo",
+     "texto": "Com pendências"
+    },
+    "arquivo": {
+     "status": "verde",
+     "texto": "vrsync.xml",
+     "link": "vrsync.xml"
+    },
+    "publicacao": {
+     "status": "publicacao",
+     "texto": "A cada 10 min"
+    },
+    "portal": {
+     "status": "verde",
+     "texto": "Ativo"
+    }
+   }
+  },
+  {
+   "nome": "QuintoAndar",
+   "grupo": "Rede QuintoAndar",
+   "audiencia": "~12,8 mi visitas/mês · 2º",
+   "formato": "Via ImovelWeb (filtro no portal de integração)",
+   "prioridade": "Alta",
+   "motivo": "2º em audiência; recebe os anúncios do ImovelWeb (exige parceria)",
+   "etapas": {
+    "documentacao": {
+     "status": "amarelo",
+     "texto": "De terceiros"
+    },
+    "vista": {
+     "status": "verde",
+     "texto": "Integrado ao Vista"
+    },
+    "dados": {
+     "status": "amarelo",
+     "texto": "Com pendências"
+    },
+    "arquivo": {
+     "status": "amarelo",
+     "texto": "imovelweb.xml",
+     "link": "imovelweb.xml"
+    },
+    "publicacao": {
+     "status": "publicacao",
+     "texto": "A cada 10 min"
+    },
+    "portal": {
+     "status": "amarelo",
+     "texto": "Ativar no portal"
+    }
+   }
+  },
+  {
+   "nome": "Chaves na Mão",
+   "grupo": "",
+   "audiencia": "~9,8 mi visitas/mês · 3º",
+   "formato": "Próprio (CNM)",
+   "prioridade": "Alta",
+   "motivo": "3º em audiência; arquivo pronto",
+   "etapas": {
+    "documentacao": {
+     "status": "verde",
+     "texto": "Oficial"
+    },
+    "vista": {
+     "status": "verde",
+     "texto": "Integrado ao Vista"
+    },
+    "dados": {
+     "status": "amarelo",
+     "texto": "Com pendências"
+    },
+    "arquivo": {
+     "status": "verde",
+     "texto": "chavesnamao.xml",
+     "link": "chavesnamao.xml"
+    },
+    "publicacao": {
+     "status": "publicacao",
+     "texto": "A cada 10 min"
+    },
+    "portal": {
+     "status": "amarelo",
+     "texto": "Ativar no portal"
+    }
+   }
+  },
+  {
+   "nome": "ImovelWeb",
+   "grupo": "Navent / QuintoAndar",
+   "audiencia": "~6,7 mi visitas/mês",
+   "formato": "OpenNavent",
+   "prioridade": "Alta",
+   "motivo": "Nacional, forte em SP; porta de entrada para o QuintoAndar",
+   "etapas": {
+    "documentacao": {
+     "status": "amarelo",
+     "texto": "De terceiros"
+    },
+    "vista": {
+     "status": "verde",
+     "texto": "Integrado ao Vista"
+    },
+    "dados": {
+     "status": "amarelo",
+     "texto": "Com pendências"
+    },
+    "arquivo": {
+     "status": "amarelo",
+     "texto": "imovelweb.xml",
+     "link": "imovelweb.xml"
+    },
+    "publicacao": {
+     "status": "publicacao",
+     "texto": "A cada 10 min"
+    },
+    "portal": {
+     "status": "amarelo",
+     "texto": "Ativar no portal"
+    }
+   }
+  },
+  {
+   "nome": "Mercado Livre Imóveis",
+   "grupo": "Mercado Livre",
+   "audiencia": "generalista (160 mi, varejo inteiro)",
+   "formato": "API (não XML)",
+   "prioridade": "Média",
+   "motivo": "Alcance enorme; exige integração por API",
+   "etapas": {
+    "documentacao": {
+     "status": "verde",
+     "texto": "Oficial"
+    },
+    "vista": {
+     "status": "verde",
+     "texto": "Integrado ao Vista"
+    },
+    "dados": {
+     "status": "cinza",
+     "texto": "—"
+    },
+    "arquivo": {
+     "status": "cinza",
+     "texto": "Exige API"
+    },
+    "publicacao": {
+     "status": "cinza",
+     "texto": "—"
+    },
+    "portal": {
+     "status": "cinza",
+     "texto": "—"
+    }
+   }
+  },
+  {
+   "nome": "123i",
+   "grupo": "",
+   "audiencia": "sem dado",
+   "formato": "Não publicado (integradores citam o modelo VivaReal)",
+   "prioridade": "Média",
+   "motivo": "Integrado ao Vista; confirmar com o portal se aceita o vrsync.xml",
+   "etapas": {
+    "documentacao": {
+     "status": "vermelho",
+     "texto": "Não encontrada"
+    },
+    "vista": {
+     "status": "verde",
+     "texto": "Integrado ao Vista"
+    },
+    "dados": {
+     "status": "cinza",
+     "texto": "—"
+    },
+    "arquivo": {
+     "status": "cinza",
+     "texto": "Não gerado"
+    },
+    "publicacao": {
+     "status": "cinza",
+     "texto": "—"
+    },
+    "portal": {
+     "status": "cinza",
+     "texto": "—"
+    }
+   }
+  },
+  {
+   "nome": "Wimoveis",
+   "grupo": "Navent / QuintoAndar",
+   "audiencia": "~1,3 mi visitas/mês",
+   "formato": "OpenNavent (mesmo arquivo do ImovelWeb)",
+   "prioridade": "Fora da região",
+   "motivo": "Foco no Distrito Federal",
+   "etapas": {
+    "documentacao": {
+     "status": "amarelo",
+     "texto": "De terceiros"
+    },
+    "vista": {
+     "status": "amarelo",
+     "texto": "Fora da lista do Vista"
+    },
+    "dados": {
+     "status": "amarelo",
+     "texto": "Com pendências"
+    },
+    "arquivo": {
+     "status": "amarelo",
+     "texto": "imovelweb.xml",
+     "link": "imovelweb.xml"
+    },
+    "publicacao": {
+     "status": "publicacao",
+     "texto": "A cada 10 min"
+    },
+    "portal": {
+     "status": "amarelo",
+     "texto": "Ativar no portal"
+    }
+   }
+  },
+  {
+   "nome": "Casa Mineira",
+   "grupo": "QuintoAndar",
+   "audiencia": "top 10 de concorrentes do ZAP",
+   "formato": "OpenNavent (mesmo arquivo do ImovelWeb)",
+   "prioridade": "Fora da região",
+   "motivo": "Foco em Minas Gerais",
+   "etapas": {
+    "documentacao": {
+     "status": "amarelo",
+     "texto": "De terceiros"
+    },
+    "vista": {
+     "status": "verde",
+     "texto": "Integrado ao Vista"
+    },
+    "dados": {
+     "status": "amarelo",
+     "texto": "Com pendências"
+    },
+    "arquivo": {
+     "status": "amarelo",
+     "texto": "imovelweb.xml",
+     "link": "imovelweb.xml"
+    },
+    "publicacao": {
+     "status": "publicacao",
+     "texto": "A cada 10 min"
+    },
+    "portal": {
+     "status": "amarelo",
+     "texto": "Ativar no portal"
+    }
+   }
+  },
+  {
+   "nome": "DF Imóveis",
+   "grupo": "",
+   "audiencia": "~1,3 mi visitas/mês",
+   "formato": "Formato ZAP (VRSync, segundo integradores; aprovação manual)",
+   "prioridade": "Fora da região",
+   "motivo": "Só Distrito Federal; aceitaria o vrsync.xml",
+   "etapas": {
+    "documentacao": {
+     "status": "amarelo",
+     "texto": "De terceiros"
+    },
+    "vista": {
+     "status": "amarelo",
+     "texto": "Fora da lista do Vista"
+    },
+    "dados": {
+     "status": "amarelo",
+     "texto": "Com pendências"
+    },
+    "arquivo": {
+     "status": "verde",
+     "texto": "vrsync.xml",
+     "link": "vrsync.xml"
+    },
+    "publicacao": {
+     "status": "publicacao",
+     "texto": "A cada 10 min"
+    },
+    "portal": {
+     "status": "verde",
+     "texto": "Ativo"
+    }
+   }
+  },
+  {
+   "nome": "Netimóveis",
+   "grupo": "",
+   "audiencia": "~390 mil visitas/mês",
+   "formato": "Não encontrado",
+   "prioridade": "Fora da região",
+   "motivo": "Foco em MG e RJ",
+   "etapas": {
+    "documentacao": {
+     "status": "vermelho",
+     "texto": "Não encontrada"
+    },
+    "vista": {
+     "status": "amarelo",
+     "texto": "Fora da lista do Vista"
+    },
+    "dados": {
+     "status": "cinza",
+     "texto": "—"
+    },
+    "arquivo": {
+     "status": "cinza",
+     "texto": "Não gerado"
+    },
+    "publicacao": {
+     "status": "cinza",
+     "texto": "—"
+    },
+    "portal": {
+     "status": "cinza",
+     "texto": "—"
+    }
+   }
+  },
+  {
+   "nome": "Imóveis SC",
+   "grupo": "",
+   "audiencia": "sem dado recente",
+   "formato": "Próprio (manual de 2017, fora do ar)",
+   "prioridade": "Fora da região",
+   "motivo": "Só Santa Catarina",
+   "etapas": {
+    "documentacao": {
+     "status": "vermelho",
+     "texto": "Não encontrada"
+    },
+    "vista": {
+     "status": "amarelo",
+     "texto": "Fora da lista do Vista"
+    },
+    "dados": {
+     "status": "cinza",
+     "texto": "—"
+    },
+    "arquivo": {
+     "status": "cinza",
+     "texto": "Não gerado"
+    },
+    "publicacao": {
+     "status": "cinza",
+     "texto": "—"
+    },
+    "portal": {
+     "status": "cinza",
+     "texto": "—"
+    }
+   }
+  }
+ ],
+ "avisos": [
+  "preço de venda fora de R$ 15 mil a R$ 150 milhões (corrigir no Vista): 47237, 43470, 40142",
+  "Arredores interrompidos: Overpass sem resposta (overpass-api.de: The operation was aborted due to timeout; overpass.kumi.systems: The operation was aborted due to timeout; overpass.private.coffee: The operation was aborted due to timeout)"
+ ],
+ "numeros": {
+  "anuncios": 3000,
+  "fotosAbaixo": 510,
+  "fotosAbaixo20": 931,
+  "semVideo": 0,
+  "semTour": 0,
+  "tour360": 0,
+  "semNumero": 0,
+  "semCoordenada": 220,
+  "semDescricao": 0,
+  "megabytes": 23.3
+ }
+}
