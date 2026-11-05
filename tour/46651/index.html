@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Tour virtual</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/pannellum/2.5.6/pannellum.css">
+<style>
+  /* Página só com o tour (regra do Grupo ZAP para o VirtualTourLink).
+     Sem câmera 360: cada foto real do anúncio vira um panorama parcial no
+     mesmo visualizador interativo dos tours 360 (Pannellum). Dá para girar e
+     aproximar dentro do que foi fotografado; nada fora da foto é inventado
+     (avoidShowingBackground). Fotos direto do CDN do Vista (CORS liberado). */
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #000; color: #fff; overflow: hidden;
+    font: 14px/1.3 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  #tour { position: fixed; inset: 0; }
+  .pnlm-panorama-info { display: none !important; }
+  #barra { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; display: flex; gap: 8px; align-items: center;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); background: linear-gradient(transparent, rgba(0,0,0,.7)); }
+  #barra button { appearance: none; border: 0; background: rgba(0,0,0,.5); color: #fff; width: 40px; height: 40px; border-radius: 50%;
+    display: grid; place-items: center; cursor: pointer; flex: none; }
+  #barra button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+  #barra svg { width: 20px; height: 20px; fill: currentColor; }
+  #legenda { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: rgba(255,255,255,.85); }
+  #contador { color: rgba(255,255,255,.72); font-variant-numeric: tabular-nums; }
+  #aviso { position: fixed; inset: 0; display: none; place-items: center; text-align: center; padding: 24px; color: rgba(255,255,255,.72); }
+  body.vazio #aviso { display: grid; }
+  body.vazio #barra { display: none; }
+</style>
+</head>
+<body>
+<div id="tour" aria-label="Tour virtual do imóvel"></div>
+<div id="barra">
+  <button id="anterior" aria-label="Foto anterior"><svg viewBox="0 0 24 24"><path d="M15.4 7.4 14 6l-6 6 6 6 1.4-1.4L10.8 12z"/></svg></button>
+  <button id="tocar" aria-label="Pausar"><svg viewBox="0 0 24 24"><path id="icone" d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg></button>
+  <button id="proxima" aria-label="Próxima foto"><svg viewBox="0 0 24 24"><path d="M8.6 16.6 10 18l6-6-6-6-1.4 1.4 4.6 4.6z"/></svg></button>
+  <span id="legenda" aria-live="polite"></span>
+  <span id="contador"></span>
+</div>
+<div id="aviso">Tour indisponível no momento.</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pannellum/2.5.6/pannellum.js"></script>
+<script>
+(function () {
+  "use strict";
+  var CAMPO = 75;        // campo de visão típico de uma foto de celular, em graus
+  var DURACAO = 9000;    // ms em cada foto no modo automático
+  var fotos = [], atual = 0, visor = null, tocando = true, relogio = 0, criadas = {};
+  function vazio() { document.body.classList.add("vazio"); }
+
+  // Código no caminho (…/tour/<código>/, um endereço por anúncio) ou em ?c=.
+  var noCaminho = (location.pathname.match(/\/([A-Za-z0-9_-]{1,40})\/?$/) || [])[1];
+  var pasta = location.pathname.replace(/[^/]*$/, "");
+  var naSubpasta = noCaminho && !/\/(tour|tour360)\/?$/.test(pasta.replace(/\/$/, "")) ? true : false;
+  var codigo = new URLSearchParams(location.search).get("c") || (naSubpasta ? noCaminho : "");
+  var RAIZ = naSubpasta ? "../" : "";
+  if (!/^[A-Za-z0-9_-]{1,40}$/.test(codigo) || !window.pannellum) return vazio();
+
+  fetch(RAIZ + "d/" + encodeURIComponent(codigo) + ".json", { cache: "no-cache" })
+    .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(function (d) {
+      fotos = (d && d.fotos || []).filter(function (f) { return f && /^https:\/\//.test(f.u); });
+      if (!fotos.length) throw new Error("sem fotos");
+      return cena(0);
+    })
+    .then(function (c0) {
+      visor = pannellum.viewer("tour", { default: { firstScene: "f0", autoLoad: true, sceneFadeDuration: 800, showControls: true,
+        compass: false, autoRotate: -4, autoRotateInactivityDelay: 2500 }, scenes: { f0: c0 } });
+      criadas.f0 = true;
+      visor.on("scenechange", function (id) { atual = Number(id.slice(1)); mostrar(); });
+      mostrar();
+      agendar();
+    })
+    .catch(vazio);
+
+  // Configuração de uma foto como panorama parcial, na proporção real dela.
+  function cena(i) {
+    return new Promise(function (ok, falha) {
+      var f = fotos[i], img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = function () {
+        var w = img.naturalWidth, h = img.naturalHeight, haov, vaov;
+        if (w >= h) { haov = CAMPO; vaov = CAMPO * h / w; } else { vaov = CAMPO; haov = CAMPO * w / h; }
+        var prox = (i + 1) % fotos.length;
+        ok({
+          type: "equirectangular", panorama: f.u, title: f.l || "",
+          haov: haov, vaov: vaov, vOffset: 0, avoidShowingBackground: true,
+          minYaw: -haov / 2, maxYaw: haov / 2, minPitch: -vaov / 2, maxPitch: vaov / 2,
+          hfov: Math.min(haov, 70), minHfov: Math.min(30, haov), maxHfov: haov, yaw: 0, pitch: 0,
+          hotSpots: fotos.length > 1 ? [{ pitch: 0, yaw: haov / 2 - Math.min(10, haov / 6), type: "scene", sceneId: "f" + prox,
+            text: "Próxima: " + (fotos[prox].l || "foto " + (prox + 1)) }] : []
+        });
+      };
+      img.onerror = function () { falha(new Error("foto " + (i + 1))); };
+      img.src = f.u;
+    });
+  }
+
+  function ir(i) {
+    i = (i + fotos.length) % fotos.length;
+    var id = "f" + i;
+    var pronto = criadas[id] ? Promise.resolve() : cena(i).then(function (c) { visor.addScene(id, c); criadas[id] = true; });
+    pronto.then(function () { visor.loadScene(id); }).catch(function () { atual = i; ir(i + 1); });
+  }
+
+  function mostrar() {
+    document.getElementById("contador").textContent = (atual + 1) + " / " + fotos.length;
+    document.getElementById("legenda").textContent = fotos[atual].l || "";
+    agendar();
+    // Deixa a próxima no cache do navegador.
+    var p = new Image(); p.crossOrigin = "anonymous"; p.src = fotos[(atual + 1) % fotos.length].u;
+  }
+  function agendar() {
+    clearTimeout(relogio);
+    if (tocando && fotos.length > 1) relogio = setTimeout(function () { ir(atual + 1); }, DURACAO);
+  }
+  function alternar(v) {
+    tocando = typeof v === "boolean" ? v : !tocando;
+    document.getElementById("icone").setAttribute("d", tocando ? "M6 5h4v14H6zm8 0h4v14h-4z" : "M8 5v14l11-7z");
+    document.getElementById("tocar").setAttribute("aria-label", tocando ? "Pausar" : "Tocar");
+    agendar();
+  }
+  document.getElementById("anterior").onclick = function () { ir(atual - 1); };
+  document.getElementById("proxima").onclick = function () { ir(atual + 1); };
+  document.getElementById("tocar").onclick = function () { alternar(); };
+  // Quem arrasta para olhar a foto assume o controle: o automático pausa.
+  document.getElementById("tour").addEventListener("pointerdown", function () { if (tocando) alternar(false); });
+  addEventListener("keydown", function (e) {
+    if (e.key === "ArrowRight" && e.shiftKey) ir(atual + 1);
+    else if (e.key === "ArrowLeft" && e.shiftKey) ir(atual - 1);
+  });
+  document.addEventListener("visibilitychange", function () { if (document.hidden) alternar(false); });
+})();
+</script>
+</body>
+</html>

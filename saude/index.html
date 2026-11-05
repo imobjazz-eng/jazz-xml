@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Saúde dos XMLs · Imobiliária Jazz</title>
+<meta name="theme-color" content="#3d3d3c">
+<style>
+  /* Painel de saúde dos XMLs dos portais. Lê ../saude.json, gravado pelo
+     gerador a cada execução (gerador/saude.mjs). A frescura é calculada
+     aqui: se o gerador parar, a página fica vermelha sozinha. */
+  /* Identidade da Imobiliária Jazz (logo e site oficial): grafite, âmbar e
+     creme. Fundo escuro sempre; as cores de status (verde, amarelo,
+     vermelho) ficam reservadas para o semáforo. */
+  :root {
+    color-scheme: dark;
+    --fundo: #151514; --cartao: #22221f; --cartao-2: #2b2b28; --texto: #f5f0e0; --suave: #b9b1a1; --linha: #3a3934;
+    --ambar: #f0a50b; --creme: #f6f0e2; --grafite: #3d3d3c;
+    --verde: #4cc98a; --verde-fundo: #13291d; --amarelo: #f5c84c; --amarelo-fundo: #2e2611;
+    --vermelho: #f6877b; --vermelho-fundo: #34171a; --acento: #f6f0e2;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--fundo); color: var(--texto); font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+  .barra-marca { background: var(--grafite); border-bottom: 3px solid var(--ambar); }
+  .barra-marca .envolve { max-width: 920px; margin: 0 auto; padding: 12px 16px; display: flex; align-items: center; gap: 14px; justify-content: space-between; }
+  .logo { display: inline-flex; align-items: center; background: var(--creme); border-radius: 10px; padding: 4px 10px; text-decoration: none; }
+  .logo img { height: 40px; width: auto; display: block; }
+  .logo .escrito { display: none; font-weight: 700; color: var(--grafite); letter-spacing: -0.02em; padding: 8px 2px; }
+  .logo.sem-imagem img { display: none; } .logo.sem-imagem .escrito { display: block; }
+  .barra-marca .rotulo { color: var(--creme); font-size: 13px; text-align: right; }
+  .barra-marca .rotulo b { color: var(--ambar); display: block; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+  main { max-width: 920px; margin: 0 auto; padding: 20px 16px 48px; }
+  h1 { font-size: 24px; margin: 0; letter-spacing: -0.01em; }
+  h1::after { content: ""; display: block; width: 44px; height: 3px; background: var(--ambar); border-radius: 2px; margin-top: 8px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--suave); margin: 28px 0 10px; font-weight: 600; }
+  a { color: var(--acento); text-decoration-color: var(--ambar); text-underline-offset: 3px; }
+  a:hover { color: var(--ambar); }
+  .topo { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+  .sub { color: var(--suave); font-size: 13px; margin-top: 2px; }
+  .geral { display: flex; align-items: center; gap: 14px; padding: 16px; border-radius: 12px; margin-top: 16px; border: 1px solid var(--linha); background: var(--cartao); }
+  .geral strong { font-size: 18px; display: block; }
+  .selo { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 3px 10px 3px 8px; border-radius: 999px; white-space: nowrap; }
+  .selo::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+  .verde { color: var(--verde); } .selo.verde { background: var(--verde-fundo); }
+  .amarelo { color: var(--amarelo); } .selo.amarelo { background: var(--amarelo-fundo); }
+  .vermelho { color: var(--vermelho); } .selo.vermelho { background: var(--vermelho-fundo); }
+  .bola { width: 36px; height: 36px; border-radius: 50%; flex: none; background: currentColor; box-shadow: 0 0 0 6px color-mix(in srgb, currentColor 18%, transparent); }
+  .canais { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .canais > .cartao { min-width: 0; }
+  /* Linha do portal: cada etapa é uma estação, da fonte (Vista) ao portal. */
+  .linha-portal { display: flex; align-items: flex-start; overflow-x: auto; padding: 12px 2px 4px; margin: 6px 0 2px; scrollbar-width: thin; }
+  .estacao { flex: 1 0 72px; min-width: 72px; display: flex; flex-direction: column; align-items: center; text-align: center; position: relative; }
+  .estacao::before { content: ""; position: absolute; top: 9px; left: -50%; width: 100%; height: 3px; background: var(--linha); z-index: 0; }
+  .estacao:first-child::before { display: none; }
+  .estacao .ponto { width: 20px; height: 20px; border-radius: 50%; position: relative; z-index: 1; border: 3px solid var(--cartao); box-sizing: content-box; }
+  .estacao.verde .ponto { background: var(--verde); } .estacao.amarelo .ponto { background: var(--amarelo); } .estacao.vermelho .ponto { background: var(--vermelho); }
+  .estacao .rot { font-size: 11px; line-height: 1.25; color: var(--suave); margin-top: 6px; padding: 0 2px; }
+  .estacao.amarelo .rot, .estacao.vermelho .rot { color: var(--texto); font-weight: 600; }
+  .pendencias { margin: 8px 0 0; padding-left: 18px; font-size: 13px; color: var(--suave); }
+  .pendencias b { color: var(--texto); font-weight: 600; }
+  .cartao { background: var(--cartao); border: 1px solid var(--linha); border-radius: 12px; padding: 14px 16px; }
+  .cartao h3 { font-size: 16px; margin: 0 0 6px; display: flex; justify-content: space-between; gap: 8px; align-items: start; }
+  .cartao p { margin: 4px 0; color: var(--suave); font-size: 13px; }
+  .cartao .num { color: var(--texto); font-size: 15px; font-weight: 600; }
+  ol.etapas { list-style: none; margin: 0; padding: 0; background: var(--cartao); border: 1px solid var(--linha); border-radius: 12px; }
+  ol.etapas li { display: grid; grid-template-columns: 28px 1fr auto; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--linha); align-items: start; }
+  ol.etapas li:first-child { border-top: 0; }
+  .passo { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; color: var(--cartao); }
+  .passo.verde { background: var(--verde); } .passo.amarelo { background: var(--amarelo); } .passo.vermelho { background: var(--vermelho); }
+  .nome { font-weight: 600; }
+  .resumo { font-size: 14px; }
+  .detalhe { font-size: 12px; color: var(--suave); }
+  ul.avisos { margin: 0; padding: 12px 16px 12px 32px; background: var(--cartao); border: 1px solid var(--linha); border-radius: 12px; font-size: 13px; }
+  .legenda { display: flex; gap: 8px; flex-wrap: wrap; font-size: 12px; color: var(--suave); margin-top: 10px; }
+  details summary { cursor: pointer; margin: 28px 0 10px; color: var(--suave); }
+  details summary h2 { margin: 0; }
+  .tabela-rolagem { overflow-x: auto; background: var(--cartao); border: 1px solid var(--linha); border-radius: 12px; }
+  table.portais { border-collapse: collapse; width: 100%; min-width: 860px; font-size: 13px; }
+  table.portais th, table.portais td { padding: 9px 10px; border-top: 1px solid var(--linha); text-align: left; vertical-align: top; }
+  table.portais thead th { border-top: 0; font-size: 12px; color: var(--suave); font-weight: 600; white-space: nowrap; }
+  table.portais td.nome { font-weight: 600; white-space: nowrap; }
+  table.portais td.nome small { display: block; font-weight: 400; color: var(--suave); }
+  table.portais td.aud { color: var(--suave); }
+  .cel { display: inline-flex; align-items: flex-start; gap: 6px; }
+  .cel::before { content: ""; width: 10px; height: 10px; border-radius: 50%; margin-top: 4px; flex: none; background: var(--linha); }
+  .cel.verde::before { background: var(--verde); } .cel.amarelo::before { background: var(--amarelo); } .cel.vermelho::before { background: var(--vermelho); }
+  .cel.cinza { color: var(--suave); }
+  table.portais td.prio small { display: block; color: var(--suave); font-size: 12px; min-width: 150px; }
+  .prio-alta, .prio-média, .prio-fora { font-weight: 700; font-size: 12px; }
+  .prio-alta { color: var(--verde); } .prio-média { color: var(--amarelo); } .prio-fora { color: var(--suave); }
+  table.portais tr.fora td { opacity: .7; }
+  #erro { display: none; }
+  body.falhou #erro { display: block; } body.falhou #conteudo { display: none; }
+  @media (max-width: 520px) { ol.etapas li { grid-template-columns: 28px 1fr; } ol.etapas li .selo { grid-column: 2; justify-self: start; } }
+</style>
+</head>
+<body>
+<header class="barra-marca"><div class="envolve">
+  <a class="logo" id="logo" href="https://imobiliariajazz.com/" target="_blank" rel="noopener">
+    <img src="https://cdn.loftsites.com.br/images/0f7a99ad-f08c-41be-96d6-bffda87c8df7/w460.webp" alt="Imobiliária Jazz" width="40" height="40">
+    <span class="escrito">Imobiliária Jazz</span>
+  </a>
+  <div class="rotulo"><b>Integração com portais</b>São José dos Campos · SP</div>
+</div></header>
+<main>
+  <div class="topo">
+    <div><h1>Saúde dos XMLs dos portais</h1><div class="sub" id="quando">Carregando…</div></div>
+    <div class="sub">Atualiza sozinha a cada minuto</div>
+  </div>
+
+  <div id="erro" class="geral vermelho"><div class="bola"></div><div><strong>Sem dados de saúde</strong>
+    <span class="sub">O arquivo saude.json não foi encontrado. O gerador pode estar parado.</span></div></div>
+
+  <div id="conteudo">
+    <div class="geral" id="geral"><div class="bola"></div><div><strong id="geral-texto"></strong><span class="sub" id="geral-sub"></span></div></div>
+
+    <h2>Portais por prioridade para a Jazz (SJC/SP)</h2>
+    <div class="tabela-rolagem"><table class="portais" id="portais">
+      <thead><tr><th scope="col">#</th><th scope="col">Portal</th><th scope="col">Prioridade</th><th scope="col">Audiência</th><th scope="col">1. Documentação</th>
+        <th scope="col">2. Vista</th><th scope="col">3. Dados</th><th scope="col">4. Arquivo</th><th scope="col">5. Publicação</th><th scope="col">6. Portal</th></tr></thead>
+      <tbody></tbody></table></div>
+    <p class="sub">Prioridade: 99,9% dos anúncios são em SP (Campinas, São José dos Campos, litoral e interior); portais regionais de outros estados ficam por último.
+      Audiência: Similarweb (ranking jul/2026, visitas dez/2024). Cinza: etapa não iniciada ou fora da prioridade.</p>
+
+    <h2>Linha de cada portal</h2>
+    <div class="canais" id="canais"></div>
+
+    <details id="detalhe"><summary><h2 style="display:inline">Detalhe das etapas</h2></summary>
+    <ol class="etapas" id="etapas"></ol></details>
+
+    <div id="bloco-avisos"><h2>Avisos da última geração</h2><ul class="avisos" id="avisos"></ul></div>
+
+    <div class="legenda">
+      <span class="selo verde">Verde: funcionando</span>
+      <span class="selo amarelo">Amarelo: funcionando com pendência</span>
+      <span class="selo vermelho">Vermelho: precisa de ação</span>
+      <span class="selo" style="color:var(--suave)">Cinza: não iniciado</span>
+    </div>
+  </div>
+</main>
+<script>
+(function () {
+  "use strict";
+  var NOMES = { verde: "Tudo funcionando", amarelo: "Funcionando, com pendências", vermelho: "Precisa de ação" };
+  var ROTULO = { verde: "Verde", amarelo: "Amarelo", vermelho: "Vermelho" };
+  var BASE = "https://imobjazz-eng.github.io/jazz-xml/";
+  function $(id) { return document.getElementById(id); }
+  // Logo do CDN da Jazz; se falhar, o nome escrito assume o lugar.
+  var imgLogo = document.querySelector("#logo img");
+  imgLogo.addEventListener("error", function () { $("logo").classList.add("sem-imagem"); });
+  if (imgLogo.complete && !imgLogo.naturalWidth) $("logo").classList.add("sem-imagem");
+  function pior(a, b) { var o = ["verde", "amarelo", "vermelho"]; return o[Math.max(o.indexOf(a), o.indexOf(b))]; }
+  function el(tag, cls, texto) { var e = document.createElement(tag); if (cls) e.className = cls; if (texto != null) e.textContent = texto; return e; }
+  function selo(s) { return el("span", "selo " + s, ROTULO[s] || s); }
+  function minutos(iso) { return Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000)); }
+  function tempo(min) { return min < 1 ? "agora" : min < 60 ? "há " + min + " min" : "há " + Math.floor(min / 60) + " h " + (min % 60) + " min"; }
+
+  function desenhar(s) {
+    // Publicação: a cada 10 min; GitHub pode atrasar. >25 min amarelo, >70 vermelho.
+    var min = minutos(s.geradoEm);
+    var pub = min > 70 ? "vermelho" : min > 25 ? "amarelo" : "verde";
+    var etapas = s.etapas.concat([{ id: "publicacao", nome: "Publicação no GitHub Pages", status: pub,
+      resumo: "Última geração " + tempo(min), detalhe: "Esperado: a cada 10 minutos." + (s.commit ? " Versão " + s.commit + "." : "") }]);
+    var geral = pior(s.geral, pub);
+
+    $("quando").textContent = "Última geração: " + new Date(s.geradoEm).toLocaleString("pt-BR") + " (" + tempo(min) + ")";
+    var g = $("geral"); g.className = "geral " + geral;
+    $("geral-texto").textContent = NOMES[geral];
+    var problemas = etapas.filter(function (e) { return e.status !== "verde"; }).map(function (e) { return e.nome; });
+    $("geral-sub").textContent = problemas.length ? "Atenção: " + problemas.join(", ") + "." : "Todas as etapas e canais estão verdes.";
+
+    // Uma linha por portal: Vista → enriquecimento → arquivo → portal.
+    var CURTO = { vista: "Vista", api: "Ativos", selecao: "Seleção", enriquecimento: "Enriquecimento", endereco: "Endereço",
+      descricao: "Descrição", fotos: "Fotos", video: "Vídeo", tour: "Tour", publicacao: "Publicação" };
+    var canais = $("canais"); canais.innerHTML = "";
+    s.canais.forEach(function (c) {
+      var estacoes = etapas.filter(function (e) { return e.id !== "publicacao"; }).map(function (e) {
+        return { rot: CURTO[e.id] || e.nome, status: e.status, nome: e.nome, resumo: e.resumo };
+      }).concat([
+        { rot: "Arquivo", status: c.statusArquivo || c.status, nome: "Arquivo " + c.arquivo, resumo: c.resumo },
+        { rot: "Publicação", status: pub, nome: "Publicação", resumo: "Última geração " + tempo(min) },
+        { rot: "Portal", status: c.ativacao ? c.ativacao.status : "verde", nome: "Portal", resumo: c.ativacao ? c.ativacao.texto : c.leitura },
+      ]);
+      var st = estacoes.reduce(function (a, e) { return pior(a, e.status); }, "verde");
+      var card = el("div", "cartao");
+      var h = el("h3"); h.appendChild(el("span", null, c.nome)); h.appendChild(selo(st)); card.appendChild(h);
+      var linha = el("div", "linha-portal"); linha.setAttribute("role", "list");
+      estacoes.forEach(function (e) {
+        var est = el("div", "estacao " + e.status); est.setAttribute("role", "listitem");
+        est.title = e.nome + ": " + e.resumo; est.setAttribute("aria-label", e.nome + ", " + ROTULO[e.status] + ": " + e.resumo);
+        est.appendChild(el("span", "ponto")); est.appendChild(el("span", "rot", e.rot)); linha.appendChild(est);
+      });
+      card.appendChild(linha);
+      var pend = estacoes.filter(function (e) { return e.status !== "verde"; });
+      if (pend.length) {
+        var ul = el("ul", "pendencias");
+        pend.forEach(function (e) { var li = el("li"); li.appendChild(el("b", null, e.rot + ": ")); li.appendChild(document.createTextNode(e.resumo)); ul.appendChild(li); });
+        card.appendChild(ul);
+      }
+      var p = el("p"); p.appendChild(document.createTextNode(c.resumo + " · ")); var a = el("a", null, c.arquivo); a.href = BASE + c.arquivo; p.appendChild(a);
+      p.appendChild(document.createTextNode(" · " + c.leitura)); card.appendChild(p);
+      canais.appendChild(card);
+    });
+
+    var tb = document.querySelector("#portais tbody"); tb.innerHTML = "";
+    (s.portais || []).forEach(function (p, i) {
+      var tr = el("tr", p.prioridade === "Fora da região" ? "fora" : null);
+      tr.appendChild(el("td", null, String(i + 1)));
+      var nome = el("td", "nome", p.nome); if (p.grupo) nome.appendChild(el("small", null, p.grupo)); tr.appendChild(nome);
+      var pr = el("td", "prio"); pr.appendChild(el("span", "prio-" + (p.prioridade || "").split(" ")[0].toLowerCase(), p.prioridade || ""));
+      if (p.motivo) pr.appendChild(el("small", null, p.motivo)); tr.appendChild(pr);
+      tr.appendChild(el("td", "aud", p.audiencia));
+      ["documentacao", "vista", "dados", "arquivo", "publicacao", "portal"].forEach(function (k) {
+        var e = p.etapas[k], st = e.status === "publicacao" ? pub : e.status;
+        if (p.prioridade === "Fora da região" && k !== "documentacao" && k !== "vista") st = "cinza";
+        var td = el("td"), c = el("span", "cel " + st);
+        c.setAttribute("aria-label", (ROTULO[st] || "Não iniciado") + ": " + e.texto);
+        if (e.link) { var a = el("a", null, e.texto); a.href = BASE + e.link; c.appendChild(a); } else c.appendChild(document.createTextNode(e.texto));
+        td.appendChild(c); tr.appendChild(td);
+      });
+      tb.appendChild(tr);
+    });
+
+    var ol = $("etapas"); ol.innerHTML = "";
+    etapas.forEach(function (e, i) {
+      var li = el("li");
+      var passo = el("div", "passo " + e.status); passo.appendChild(el("span", null, String(i + 1))); li.appendChild(passo);
+      var d = el("div"); d.appendChild(el("div", "nome", e.nome)); d.appendChild(el("div", "resumo", e.resumo));
+      if (e.detalhe) d.appendChild(el("div", "detalhe", e.detalhe));
+      li.appendChild(d); li.appendChild(selo(e.status)); ol.appendChild(li);
+    });
+
+    var av = $("avisos"); av.innerHTML = "";
+    (s.avisos || []).forEach(function (t) { av.appendChild(el("li", null, t)); });
+    $("bloco-avisos").style.display = (s.avisos || []).length ? "" : "none";
+    document.body.classList.remove("falhou");
+  }
+
+  function carregar() {
+    fetch("../saude.json", { cache: "no-store" })
+      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(desenhar)
+      .catch(function () { document.body.classList.add("falhou"); $("quando").textContent = "Sem dados"; });
+  }
+  carregar();
+  setInterval(carregar, 60000);
+})();
+</script>
+</body>
+</html>
